@@ -42,6 +42,33 @@ function createAlphaXivPrimaryFixture() {
   `;
 }
 
+function createAlphaXivPrimaryLiveFixture() {
+        return `
+        <main>
+            <section>
+                <div id="alpha-live-row" class="top-actions-row">
+                    <div class="nav-links">
+                        <a href="#paper">Paper</a>
+                        <a href="#blog">Blog</a>
+                        <a href="#resources">Resources</a>
+                    </div>
+                    <div id="alpha-live-actions" class="action-controls">
+                        <div class="metrics-group">
+                            <button type="button">993</button>
+                            <button type="button" aria-label="Copy share link"></button>
+                            <img alt="Download Paper's PDF" src="/download.svg">
+                            <img alt="Bookmark" src="/bookmark.svg">
+                        </div>
+                        <div class="tool-toggle">
+                            <button type="button">Hide Tools</button>
+                        </div>
+                    </div>
+                </div>
+            </section>
+        </main>
+    `;
+}
+
 function createAlphaXivFallbackFixture() {
     return `
     <main>
@@ -289,6 +316,17 @@ test('findMountPoint falls back to Hide Tools container on AlphaXiv', () => {
 
     assert.equal(mount.strategy, 'alphaxiv-fallback');
     assert.equal(mount.container.id, 'alpha-fallback-tools');
+});
+
+test('findMountPoint uses AlphaXiv primary actions container on the live toolbar structure', () => {
+    const dom = createDom(
+        createAlphaXivPrimaryLiveFixture(),
+        'https://www.alphaxiv.org/abs/1706.03762'
+    );
+    const mount = findMountPoint(dom.window.document, 'alphaxiv');
+
+    assert.equal(mount.strategy, 'alphaxiv-primary');
+    assert.equal(mount.container.id, 'alpha-live-actions');
 });
 
 test('findMountPoint finds arXiv abs insertion point after Access Paper links', () => {

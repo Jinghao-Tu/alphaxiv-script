@@ -234,19 +234,18 @@ function resolvePageType(parsedUrl) {
 }
 
 function findAlphaXivMount(document) {
-    const primaryRow = findSmallestMatchingElement(
+    const navGroup = findSmallestMatchingElement(
         document,
         'div, section, nav, header, main',
-        (element) => (
-            hasRequiredTexts(element, ['Paper', 'Blog', 'Resources'])
-            && /Download/i.test(normalizeText(element.textContent))
-        )
+        (element) => hasRequiredTexts(element, ['Paper', 'Blog', 'Resources'])
     );
 
-    if (primaryRow) {
+    if (navGroup) {
+        const primaryRow = navGroup.parentElement ?? navGroup;
         const actionsContainer = Array.from(primaryRow.children).find((child) => (
-            !hasRequiredTexts(child, ['Paper', 'Blog', 'Resources'])
-            && /Download/i.test(normalizeText(child.textContent))
+            child !== navGroup
+            && !hasRequiredTexts(child, ['Paper', 'Blog', 'Resources'])
+            && isAlphaXivActionsContainer(child)
         ));
 
         if (actionsContainer) {
@@ -430,6 +429,13 @@ function hasRequiredTexts(element, requiredTexts) {
 
 function normalizeText(text) {
     return text.replace(/\s+/g, ' ').trim();
+}
+
+function isAlphaXivActionsContainer(element) {
+    return (
+        element.querySelectorAll('button').length > 0
+        || /Hide Tools/i.test(normalizeText(element.textContent))
+    );
 }
 
 function isBackToAbstractLabel(text) {
