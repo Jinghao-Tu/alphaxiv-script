@@ -1,5 +1,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { execFileSync } from 'node:child_process';
+import { existsSync, readFileSync, rmSync } from 'node:fs';
+import { dirname, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { JSDOM } from 'jsdom';
 import {
     buildTargets,
@@ -8,6 +12,11 @@ import {
     parsePaperLocation,
     renderSwitcher
 } from '../src/switcher.mjs';
+
+const TEST_FILE_PATH = fileURLToPath(import.meta.url);
+const TESTS_DIR = dirname(TEST_FILE_PATH);
+const REPO_ROOT = resolve(TESTS_DIR, '..');
+const DIST_FILE_PATH = resolve(REPO_ROOT, 'dist/alphaxiv-arxiv-switcher.user.js');
 
 function createDom(html, url) {
     return new JSDOM(html, { url });
@@ -448,4 +457,30 @@ test('installSwitcher disconnects the observer after delayed mount times out', (
     harness.runTimeout();
 
     assert.equal(harness.observers[0].disconnectCalls, 1);
+});
+
+test('build smoke test writes a distributable userscript with required metadata', () => {
+    rmSync(DIST_FILE_PATH, { force: true });
+
+    execFileSync('node', ['scripts/build-userscript.mjs'], {
+        cwd: REPO_ROOT,
+        stdio: 'pipe'
+    });
+
+    assert.equal(existsSync(DIST_FILE_PATH), true);
+
+    const output = readFileSync(DIST_FILE_PATH, 'utf8');
+
+    assert.match(output, /^\/\/ ==UserScript==/m);
+    assert.match(output, /@name\s+AlphaXiv \/ arXiv Switcher/);
+
+    for (const matchEntry of [
+        '@match        https://www.alphaxiv.org/abs/*',
+        '@match        https://arxiv.org/abs/*',
+        '@match        https://www.arxiv.org/abs/*',
+        '@match        https://arxiv.org/html/*',
+        '@match        https://www.arxiv.org/html/*'
+    ]) {
+        assert.match(output, new RegExp(matchEntry.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
+    }
 });
