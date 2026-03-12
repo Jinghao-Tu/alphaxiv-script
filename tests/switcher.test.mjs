@@ -70,6 +70,58 @@ function createArxivHtmlFixture() {
   `;
 }
 
+function createAsyncInstallHarness() {
+    const observers = [];
+    const timers = new Map();
+    const clearedTimeouts = [];
+    let nextTimeoutId = 1;
+
+    class FakeMutationObserver {
+        constructor(callback) {
+            this.callback = callback;
+            this.disconnectCalls = 0;
+            this.observeCalls = [];
+            observers.push(this);
+        }
+
+        observe(target, options) {
+            this.observeCalls.push({ target, options });
+        }
+
+        disconnect() {
+            this.disconnectCalls += 1;
+        }
+
+        trigger(records = [{ type: 'childList' }]) {
+            this.callback(records, this);
+        }
+    }
+
+    return {
+        MutationObserver: FakeMutationObserver,
+        setTimeout(callback, delay) {
+            const id = nextTimeoutId;
+            nextTimeoutId += 1;
+            timers.set(id, { callback, delay });
+            return id;
+        },
+        clearTimeout(id) {
+            clearedTimeouts.push(id);
+            timers.delete(id);
+        },
+        observers,
+        timers,
+        clearedTimeouts,
+        runTimeout(id = Array.from(timers.keys())[0]) {
+            const timer = timers.get(id);
+
+            assert.ok(timer, `Expected timer ${id} to exist`);
+            timers.delete(id);
+            timer.callback();
+        }
+    };
+}
+
 function getSwitchTargets(root) {
     return Array.from(root.querySelectorAll('[data-switch-target]')).map((element) => ({
         target: element.getAttribute('data-switch-target'),
@@ -304,4 +356,96 @@ test('installSwitcher does not migrate a fallback switcher when primary mount ap
     const switchers = document.querySelectorAll('[data-alphaxiv-switcher]');
     assert.equal(switchers.length, 1);
     assert.equal(switchers[0].parentElement.id, 'alpha-fallback-tools');
+});
+
+test('installSwitcher injects after a delayed mount appears through observed DOM changes', () => {
+    const dom = createDom('<main id="shell"></main>', 'https://arxiv.org/abs/1706.03762');
+    const { document } = dom.window;
+    const harness = createAsyncInstallHarness();
+
+    installSwitcher({
+        document,
+        url: 'https://arxiv.org/abs/1706.03762',
+        MutationObserver: harness.MutationObserver,
+        setTimeout: harness.setTimeout,
+        clearTimeout: harness.clearTimeout
+    });
+
+    assert.equal(document.querySelector('[data-alphaxiv-switcher]'), null);
+    assert.equal(harness.observers.length, 1);
+    assert.equal(Array.from(harness.timers.values())[0].delay, 5000);
+
+    const delayedMountHost = document.createElement('div');
+    delayedMountHost.innerHTML = createArxivAbsFixture();
+    document.body.append(delayedMountHost);
+
+    harness.observers[0].trigger();
+
+    const switcher = document.querySelector('[data-alphaxiv-switcher]');
+    const links = document.getElementById('access-paper-links');
+    const license = document.getElementById('view-license');
+
+    assert.equal(links.nextElementSibling, switcher);
+    assert.equal(switcher.nextElementSibling, license);
+});
+
+test('installSwitcher disconnects the observer and clears the timeout after delayed injection succeeds', () => {
+    const dom = createDom('<main id="shell"></main>', 'https://arxiv.org/abs/1706.03762');
+    const { document } = dom.window;
+    const harness = createAsyncInstallHarness();
+
+    installSwitcher({
+        document,
+        url: 'https://arxiv.org/abs/1706.03762',
+        MutationObserver: harness.MutationObserver,
+        setTimeout: harness.setTimeout,
+        clearTimeout: harness.clearTimeout
+    });
+
+    const delayedMountHost = document.createElement('div');
+    delayedMountHost.innerHTML = createArxivAbsFixture();
+    document.body.append(delayedMountHost);
+
+    harness.observers[0].trigger();
+
+    assert.equal(harness.observers[0].disconnectCalls, 1);
+    assert.deepEqual(harness.clearedTimeouts, [1]);
+    assert.equal(harness.timers.size, 0);
+});
+
+test('installSwitcher exits silently after waiting 5 seconds without a mount point', () => {
+    const dom = createDom('<main id="shell"></main>', 'https://arxiv.org/abs/1706.03762');
+    const { document } = dom.window;
+    const harness = createAsyncInstallHarness();
+
+    installSwitcher({
+        document,
+        url: 'https://arxiv.org/abs/1706.03762',
+        MutationObserver: harness.MutationObserver,
+        setTimeout: harness.setTimeout,
+        clearTimeout: harness.clearTimeout
+    });
+
+    assert.doesNotThrow(() => {
+        harness.runTimeout();
+    });
+    assert.equal(document.querySelector('[data-alphaxiv-switcher]'), null);
+});
+
+test('installSwitcher disconnects the observer after delayed mount times out', () => {
+    const dom = createDom('<main id="shell"></main>', 'https://arxiv.org/abs/1706.03762');
+    const { document } = dom.window;
+    const harness = createAsyncInstallHarness();
+
+    installSwitcher({
+        document,
+        url: 'https://arxiv.org/abs/1706.03762',
+        MutationObserver: harness.MutationObserver,
+        setTimeout: harness.setTimeout,
+        clearTimeout: harness.clearTimeout
+    });
+
+    harness.runTimeout();
+
+    assert.equal(harness.observers[0].disconnectCalls, 1);
 });

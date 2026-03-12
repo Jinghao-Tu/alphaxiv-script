@@ -1,6 +1,7 @@
 const ALPHAXIV_ORIGIN = 'https://www.alphaxiv.org';
 const ARXIV_ORIGIN = 'https://arxiv.org';
 const SWITCHER_SELECTOR = '[data-alphaxiv-switcher]';
+const INSTALL_TIMEOUT_MS = 5000;
 
 export function parsePaperLocation(url) {
     const parsedUrl = new URL(url);
@@ -89,8 +90,14 @@ export function renderSwitcher(document, state, targets) {
     return root;
 }
 
-export function installSwitcher({ document, url }) {
-    if (!document || document.querySelector(SWITCHER_SELECTOR)) {
+export function installSwitcher({
+    document,
+    url,
+    MutationObserver: MutationObserverImplementation = globalThis.MutationObserver,
+    setTimeout: setTimeoutImplementation = globalThis.setTimeout?.bind(globalThis),
+    clearTimeout: clearTimeoutImplementation = globalThis.clearTimeout?.bind(globalThis)
+}) {
+    if (!document) {
         return null;
     }
 
@@ -102,6 +109,74 @@ export function installSwitcher({ document, url }) {
     }
 
     const targets = buildTargets(state);
+
+    if (!targets || document.querySelector(SWITCHER_SELECTOR)) {
+        return null;
+    }
+
+    const switcher = tryInstallSwitcher(document, state, targets);
+
+    if (switcher) {
+        return switcher;
+    }
+
+    if (
+        typeof MutationObserverImplementation !== 'function'
+        || typeof setTimeoutImplementation !== 'function'
+    ) {
+        return null;
+    }
+
+    let observer = null;
+    let timeoutId = null;
+
+    const disconnectObserver = () => {
+        if (!observer) {
+            return;
+        }
+
+        observer.disconnect();
+        observer = null;
+    };
+
+    const clearPendingTimeout = () => {
+        if (timeoutId === null || typeof clearTimeoutImplementation !== 'function') {
+            return;
+        }
+
+        clearTimeoutImplementation(timeoutId);
+        timeoutId = null;
+    };
+
+    observer = new MutationObserverImplementation(() => {
+        const delayedSwitcher = tryInstallSwitcher(document, state, targets);
+
+        if (!delayedSwitcher && !document.querySelector(SWITCHER_SELECTOR)) {
+            return;
+        }
+
+        disconnectObserver();
+        clearPendingTimeout();
+    });
+
+    observer.observe(document.documentElement ?? document.body ?? document, {
+        childList: true,
+        subtree: true
+    });
+
+    timeoutId = setTimeoutImplementation(() => {
+        disconnectObserver();
+        timeoutId = null;
+    }, INSTALL_TIMEOUT_MS);
+
+    return null;
+}
+
+function tryInstallSwitcher(document, state, targets) {
+    if (document.querySelector(SWITCHER_SELECTOR)) {
+        return null;
+    }
+
     const mountPoint = findMountPoint(document, state.pageType);
 
     if (!mountPoint) {
