@@ -30,6 +30,26 @@ test('build targets for old-style abs hides html target', () => {
   });
 });
 
+test('preserves version when building html target from versioned abs input', () => {
+  const state = parsePaperLocation('https://arxiv.org/abs/1706.03762v7');
+
+  assert.deepEqual(buildTargets(state), {
+    alphaxiv: 'https://www.alphaxiv.org/abs/1706.03762',
+    arxivAbs: null,
+    arxivHtml: 'https://arxiv.org/html/1706.03762v7'
+  });
+});
+
+test('preserves version when building abs target from versioned html input', () => {
+  const state = parsePaperLocation('https://arxiv.org/html/1706.03762v7');
+
+  assert.deepEqual(buildTargets(state), {
+    alphaxiv: 'https://www.alphaxiv.org/abs/1706.03762',
+    arxivAbs: 'https://arxiv.org/abs/1706.03762v7',
+    arxivHtml: null
+  });
+});
+
 test('normalizes www.arxiv.org abs URL parsing', () => {
   assert.deepEqual(parsePaperLocation('https://www.arxiv.org/abs/1706.03762'), {
     pageType: 'arxiv-abs',
