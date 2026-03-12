@@ -291,7 +291,7 @@ function findArxivAbsMount(document) {
     const linkList = findSmallestMatchingElement(
         container,
         'div, ul, ol, p',
-        (element) => hasRequiredTexts(element, ['View PDF', 'TeX Source'])
+        (element) => hasRequiredTexts(element, ['View PDF'])
     );
 
     if (!linkList) {
@@ -301,17 +301,18 @@ function findArxivAbsMount(document) {
     const licenseLink = Array.from(container.querySelectorAll('a')).find((element) => (
         normalizeText(element.textContent).toLowerCase() === 'view license'
     ));
+    const insertBefore = linkList.nextElementSibling ?? findDirectChild(container, licenseLink);
 
     return {
         container,
         strategy: 'after-access-paper-list',
-        insertBefore: licenseLink ?? linkList.nextSibling ?? null
+        insertBefore: insertBefore ?? null
     };
 }
 
 function findArxivHtmlMount(document) {
     const backLink = Array.from(document.querySelectorAll('a')).find((element) => (
-        normalizeText(element.textContent) === 'Back to abstract page'
+        isBackToAbstractLabel(normalizeText(element.textContent))
     ));
 
     if (!backLink) {
@@ -417,7 +418,9 @@ function createItemElement(document, item) {
 function findSmallestMatchingElement(root, selector, predicate) {
     const candidates = Array.from(root.querySelectorAll(selector)).filter(predicate);
 
-    return candidates.find((element) => !Array.from(element.children).some(predicate)) ?? null;
+    return candidates.find((element) => !Array.from(element.children).some((child) => (
+        child.matches(selector) && predicate(child)
+    ))) ?? null;
 }
 
 function hasRequiredTexts(element, requiredTexts) {
@@ -427,6 +430,24 @@ function hasRequiredTexts(element, requiredTexts) {
 
 function normalizeText(text) {
     return text.replace(/\s+/g, ' ').trim();
+}
+
+function isBackToAbstractLabel(text) {
+    return /^Back to abstract(?: page)?$/i.test(text);
+}
+
+function findDirectChild(container, node) {
+    if (!container || !node) {
+        return null;
+    }
+
+    let current = node;
+
+    while (current && current.parentElement !== container) {
+        current = current.parentElement;
+    }
+
+    return current?.parentElement === container ? current : null;
 }
 
 function splitPaperId(rawId, idStyle) {

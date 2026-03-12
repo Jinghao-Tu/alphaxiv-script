@@ -68,6 +68,27 @@ function createArxivAbsFixture() {
   `;
 }
 
+function createArxivAbsNestedLicenseFixture() {
+    return `
+        <main>
+            <section class="extra-services">
+                <div class="full-text">
+                    <span class="descriptor">Full-text links:</span>
+                    <h2>Access Paper:</h2>
+                    <ul id="access-paper-links">
+                        <li><a href="/pdf/1706.03762">View PDF</a></li>
+                        <li><a href="/html/1706.03762">HTML (experimental)</a></li>
+                        <li><a href="/src/1706.03762">TeX Source</a></li>
+                    </ul>
+                    <div id="license-block" class="abs-license">
+                        <a id="view-license" href="/license">view license</a>
+                    </div>
+                </div>
+            </section>
+        </main>
+    `;
+}
+
 function createArxivHtmlFixture() {
     return `
     <main>
@@ -77,6 +98,38 @@ function createArxivHtmlFixture() {
       </nav>
     </main>
   `;
+}
+
+function createArxivAbsOldStyleFixture() {
+    return `
+        <main>
+            <section class="extra-services">
+                <div class="full-text">
+                    <span class="descriptor">Full-text links:</span>
+                    <h2>Access Paper:</h2>
+                    <ul id="access-paper-links">
+                        <li><a href="/pdf/cs/0112017v1">View PDF</a></li>
+                    </ul>
+                    <div id="license-block" class="abs-license">
+                        <a id="view-license" href="/license">view license</a>
+                    </div>
+                </div>
+            </section>
+        </main>
+    `;
+}
+
+function createArxivHtmlCurrentFixture() {
+    return `
+        <main>
+            <header class="arxiv-html-header">
+                <nav id="html-nav" class="html-header-nav">
+                    <a id="back-to-abstract" href="/abs/1706.03762v7">Back to Abstract</a>
+                    <a id="download-pdf" href="/pdf/1706.03762v7">Download PDF</a>
+                </nav>
+            </header>
+        </main>
+    `;
 }
 
 function createAsyncInstallHarness() {
@@ -321,6 +374,53 @@ test('installSwitcher inserts arXiv abs row after Access Paper links and before 
     assert.equal(switcher.nextElementSibling, license);
 });
 
+test('installSwitcher inserts arXiv abs row before a nested license block on the real page structure', () => {
+    const dom = createDom(
+        createArxivAbsNestedLicenseFixture(),
+        'https://arxiv.org/abs/1706.03762'
+    );
+    const { document } = dom.window;
+    const links = document.getElementById('access-paper-links');
+    const licenseBlock = document.getElementById('license-block');
+
+    assert.doesNotThrow(() => {
+        installSwitcher({ document, url: 'https://arxiv.org/abs/1706.03762' });
+    });
+
+    const switcher = document.querySelector('[data-alphaxiv-switcher]');
+    assert.equal(links.nextElementSibling, switcher);
+    assert.equal(switcher.nextElementSibling, licenseBlock);
+});
+
+test('installSwitcher inserts an old-style arXiv abs row when Access Paper only exposes View PDF', () => {
+    const dom = createDom(
+        createArxivAbsOldStyleFixture(),
+        'https://arxiv.org/abs/cs/0112017v1'
+    );
+    const { document } = dom.window;
+    const links = document.getElementById('access-paper-links');
+    const licenseBlock = document.getElementById('license-block');
+
+    installSwitcher({ document, url: 'https://arxiv.org/abs/cs/0112017v1' });
+
+    const switcher = document.querySelector('[data-alphaxiv-switcher]');
+    assert.ok(switcher);
+    assert.equal(links.nextElementSibling, switcher);
+    assert.equal(switcher.nextElementSibling, licenseBlock);
+    assert.deepEqual(getSwitchTargets(switcher), [
+        {
+            target: 'alphaxiv',
+            text: 'AlphaXiv',
+            href: 'https://www.alphaxiv.org/abs/cs/0112017'
+        },
+        {
+            target: 'arxiv-abs',
+            text: 'Abstract',
+            href: null
+        }
+    ]);
+});
+
 test('installSwitcher inserts arXiv HTML switcher after Back to abstract page and before Download PDF', () => {
     const dom = createDom(createArxivHtmlFixture(), 'https://arxiv.org/html/1706.03762');
     const { document } = dom.window;
@@ -330,6 +430,20 @@ test('installSwitcher inserts arXiv HTML switcher after Back to abstract page an
     installSwitcher({ document, url: 'https://arxiv.org/html/1706.03762' });
 
     const switcher = document.querySelector('[data-alphaxiv-switcher]');
+    assert.equal(backLink.nextElementSibling, switcher);
+    assert.equal(switcher.nextElementSibling, downloadLink);
+});
+
+test('installSwitcher inserts arXiv HTML switcher after Back to Abstract on the current page copy', () => {
+    const dom = createDom(createArxivHtmlCurrentFixture(), 'https://arxiv.org/html/1706.03762');
+    const { document } = dom.window;
+    const backLink = document.getElementById('back-to-abstract');
+    const downloadLink = document.getElementById('download-pdf');
+
+    installSwitcher({ document, url: 'https://arxiv.org/html/1706.03762' });
+
+    const switcher = document.querySelector('[data-alphaxiv-switcher]');
+    assert.ok(switcher);
     assert.equal(backLink.nextElementSibling, switcher);
     assert.equal(switcher.nextElementSibling, downloadLink);
 });
