@@ -22,6 +22,10 @@ function createDom(html, url) {
     return new JSDOM(html, { url });
 }
 
+function normalizeInlineText(text) {
+    return text.replace(/\s+/g, ' ').trim();
+}
+
 function createAlphaXivPrimaryFixture() {
     return `
     <main>
@@ -43,7 +47,7 @@ function createAlphaXivPrimaryFixture() {
 }
 
 function createAlphaXivPrimaryLiveFixture() {
-        return `
+    return `
         <main>
             <section>
                 <div id="alpha-live-row" class="top-actions-row">
@@ -53,11 +57,15 @@ function createAlphaXivPrimaryLiveFixture() {
                         <a href="#resources">Resources</a>
                     </div>
                     <div id="alpha-live-actions" class="action-controls">
-                        <div class="metrics-group">
+                        <div id="alpha-live-left-toolbar" class="metrics-group">
                             <button type="button">993</button>
                             <button type="button" aria-label="Copy share link"></button>
                             <img alt="Download Paper's PDF" src="/download.svg">
                             <img alt="Bookmark" src="/bookmark.svg">
+                        </div>
+                        <div id="alpha-live-center-controls" class="pager-controls">
+                            <input type="text" disabled value="-">
+                            <span>/ -</span>
                         </div>
                         <div class="tool-toggle">
                             <button type="button">Hide Tools</button>
@@ -79,20 +87,108 @@ function createAlphaXivFallbackFixture() {
   `;
 }
 
+function createAlphaXivLeftToolbarFixture() {
+    return `
+        <main>
+            <section>
+                <div id="alpha-tabs">
+                    <a href="#paper">Paper</a>
+                    <a href="#blog">Blog</a>
+                    <a href="#resources">Resources</a>
+                </div>
+                <div id="alpha-toolbar-row">
+                    <div id="alpha-left-toolbar">
+                        <button type="button" aria-label="Like">61</button>
+                        <button type="button" aria-label="Bookmark"></button>
+                        <button type="button" aria-label="Download"></button>
+                        <button type="button" aria-label="Info"></button>
+                        <button type="button" aria-label="Share"></button>
+                    </div>
+                    <div id="alpha-center-controls">
+                        <span>1 / 24</span>
+                    </div>
+                    <div id="alpha-right-tools">
+                        <button type="button">Hide Tools</button>
+                    </div>
+                </div>
+            </section>
+        </main>
+    `;
+}
+
 function createArxivAbsFixture() {
     return `
     <main>
       <section id="access-paper-block">
         <h2>Access Paper:</h2>
-        <div id="access-paper-links">
-          <a href="/pdf/1706.03762">View PDF</a>
-          <a href="/html/1706.03762">HTML (experimental)</a>
-          <a href="/e-print/1706.03762">TeX Source</a>
-        </div>
+                <ul id="access-paper-links">
+                    <li><a href="/pdf/1706.03762">View PDF</a></li>
+                    <li><a href="/html/1706.03762">HTML (experimental)</a></li>
+                    <li><a href="/e-print/1706.03762">TeX Source</a></li>
+                </ul>
         <a id="view-license" href="/license">view license</a>
       </section>
     </main>
   `;
+}
+
+function createAlphaXivNoisyHideToolsFixture() {
+    return `
+        <main>
+            <section>
+                <div id="alpha-primary-row">
+                    <div class="nav-links">
+                        <a href="#paper">Paper</a>
+                        <a href="#blog">Blog</a>
+                        <a href="#resources">Resources</a>
+                    </div>
+                    <div id="alpha-primary-actions" class="action-controls">
+                        <button type="button">12</button>
+                        <button type="button">Download</button>
+                    </div>
+                </div>
+                <div id="alpha-noise-row">
+                    <div id="alpha-noise-left">
+                        <button type="button" aria-label="Noise A"></button>
+                        <button type="button" aria-label="Noise B"></button>
+                        <button type="button" aria-label="Noise C"></button>
+                        <img alt="noise icon" src="/noise.svg">
+                    </div>
+                    <div id="alpha-noise-right">
+                        <button type="button">Hide Tools</button>
+                    </div>
+                </div>
+            </section>
+        </main>
+    `;
+}
+
+function createAlphaXivMultipleHideToolsFixture() {
+    return `
+        <main>
+            <section>
+                <div id="alpha-unrelated-row">
+                    <div id="alpha-unrelated-right">
+                        <button type="button">Hide Tools</button>
+                    </div>
+                </div>
+                <div id="alpha-target-toolbar-row">
+                    <div id="alpha-target-left-toolbar">
+                        <button type="button" aria-label="Like">993</button>
+                        <button type="button" aria-label="Bookmark"></button>
+                        <img alt="Download Paper's PDF" src="/download.svg">
+                        <img alt="Share" src="/share.svg">
+                    </div>
+                    <div id="alpha-target-center-controls">
+                        <span>1 / 15</span>
+                    </div>
+                    <div id="alpha-target-right-tools">
+                        <button type="button">Hide Tools</button>
+                    </div>
+                </div>
+            </section>
+        </main>
+    `;
 }
 
 function createArxivAbsNestedLicenseFixture() {
@@ -159,6 +255,20 @@ function createArxivHtmlCurrentFixture() {
     `;
 }
 
+function createArxivHtmlWithoutDownloadFixture() {
+    return `
+        <main>
+            <header class="arxiv-html-header">
+                <nav id="html-nav" class="html-header-nav">
+                    <a id="back-to-abstract" href="/abs/1706.03762v7">Back to abstract page</a>
+
+                    <a id="toggle-reading" href="#">Toggle reading mode</a>
+                </nav>
+            </header>
+        </main>
+    `;
+}
+
 function createAsyncInstallHarness() {
     const observers = [];
     const timers = new Map();
@@ -215,7 +325,9 @@ function getSwitchTargets(root) {
     return Array.from(root.querySelectorAll('[data-switch-target]')).map((element) => ({
         target: element.getAttribute('data-switch-target'),
         text: element.textContent.trim(),
-        href: element.getAttribute('href')
+        href: element.getAttribute('href'),
+        ariaLabel: element.getAttribute('aria-label'),
+        title: element.getAttribute('title')
     }));
 }
 
@@ -318,24 +430,57 @@ test('findMountPoint falls back to Hide Tools container on AlphaXiv', () => {
     assert.equal(mount.container.id, 'alpha-fallback-tools');
 });
 
-test('findMountPoint uses AlphaXiv primary actions container on the live toolbar structure', () => {
+test('findMountPoint uses AlphaXiv left icon toolbar on the live toolbar structure', () => {
     const dom = createDom(
         createAlphaXivPrimaryLiveFixture(),
         'https://www.alphaxiv.org/abs/1706.03762'
     );
     const mount = findMountPoint(dom.window.document, 'alphaxiv');
 
+    assert.equal(mount.strategy, 'alphaxiv-left-toolbar');
+    assert.equal(mount.container.id, 'alpha-live-left-toolbar');
+});
+
+test('findMountPoint prefers AlphaXiv left icon toolbar when available', () => {
+    const dom = createDom(
+        createAlphaXivLeftToolbarFixture(),
+        'https://www.alphaxiv.org/abs/1706.03762'
+    );
+    const mount = findMountPoint(dom.window.document, 'alphaxiv');
+
+    assert.equal(mount.strategy, 'alphaxiv-left-toolbar');
+    assert.equal(mount.container.id, 'alpha-left-toolbar');
+});
+
+test('findMountPoint does not mis-select noisy left controls as AlphaXiv icon toolbar', () => {
+    const dom = createDom(
+        createAlphaXivNoisyHideToolsFixture(),
+        'https://www.alphaxiv.org/abs/1706.03762'
+    );
+    const mount = findMountPoint(dom.window.document, 'alphaxiv');
+
     assert.equal(mount.strategy, 'alphaxiv-primary');
-    assert.equal(mount.container.id, 'alpha-live-actions');
+    assert.equal(mount.container.id, 'alpha-primary-actions');
+});
+
+test('findMountPoint picks target icon toolbar when multiple Hide Tools controls exist', () => {
+    const dom = createDom(
+        createAlphaXivMultipleHideToolsFixture(),
+        'https://www.alphaxiv.org/abs/2502.11374'
+    );
+    const mount = findMountPoint(dom.window.document, 'alphaxiv');
+
+    assert.equal(mount.strategy, 'alphaxiv-left-toolbar');
+    assert.equal(mount.container.id, 'alpha-target-left-toolbar');
 });
 
 test('findMountPoint finds arXiv abs insertion point after Access Paper links', () => {
     const dom = createDom(createArxivAbsFixture(), 'https://arxiv.org/abs/1706.03762');
     const mount = findMountPoint(dom.window.document, 'arxiv-abs');
 
-    assert.equal(mount.strategy, 'after-access-paper-list');
-    assert.equal(mount.container.id, 'access-paper-block');
-    assert.equal(mount.insertBefore.id, 'view-license');
+    assert.equal(mount.strategy, 'in-access-paper-list');
+    assert.equal(mount.container.id, 'access-paper-links');
+    assert.equal(mount.insertBefore, null);
 });
 
 test('findMountPoint finds arXiv HTML insertion point after Back to abstract page', () => {
@@ -356,16 +501,31 @@ test('renderSwitcher renders two links for AlphaXiv new-style pages', () => {
     const root = renderSwitcher(dom.window.document, state, buildTargets(state));
 
     assert.equal(root.getAttribute('data-alphaxiv-switcher'), '');
+    assert.equal(root.style.gap, '0.5rem');
+    const iconLinks = root.querySelectorAll('a[data-switch-target]');
+    assert.equal(iconLinks.length, 2);
+
+    for (const iconLink of iconLinks) {
+        assert.equal(iconLink.style.minInlineSize, '1.5rem');
+        assert.equal(iconLink.style.blockSize, '1.35rem');
+        assert.equal(iconLink.style.borderRadius, '0.45rem');
+        assert.equal(iconLink.style.fontWeight, '600');
+    }
+
     assert.deepEqual(getSwitchTargets(root), [
         {
             target: 'arxiv-abs',
-            text: 'arXiv Abs',
-            href: 'https://arxiv.org/abs/1706.03762'
+            text: 'A',
+            href: 'https://arxiv.org/abs/1706.03762',
+            ariaLabel: 'Open arXiv abstract',
+            title: 'arXiv Abstract'
         },
         {
             target: 'arxiv-html',
-            text: 'arXiv HTML',
-            href: 'https://arxiv.org/html/1706.03762'
+            text: 'H',
+            href: 'https://arxiv.org/html/1706.03762',
+            ariaLabel: 'Open arXiv HTML',
+            title: 'arXiv HTML'
         }
     ]);
 });
@@ -381,22 +541,38 @@ test('renderSwitcher omits HTML target for AlphaXiv old-style pages', () => {
     assert.deepEqual(getSwitchTargets(root), [
         {
             target: 'arxiv-abs',
-            text: 'arXiv Abs',
-            href: 'https://arxiv.org/abs/cs/0112017'
+            text: 'A',
+            href: 'https://arxiv.org/abs/cs/0112017',
+            ariaLabel: 'Open arXiv abstract',
+            title: 'arXiv Abstract'
         }
     ]);
 });
 
-test('renderSwitcher marks Abstract as the current page on arXiv abs', () => {
+test('renderSwitcher keeps arXiv abs panel minimal with only AlphaXiv link', () => {
     const dom = createDom('<main></main>', 'https://arxiv.org/abs/1706.03762');
     const state = parsePaperLocation('https://arxiv.org/abs/1706.03762');
     const root = renderSwitcher(dom.window.document, state, buildTargets(state));
-    const current = root.querySelector('[data-switch-target="arxiv-abs"]');
 
-    assert.match(root.textContent, /View on:/);
-    assert.equal(current.textContent.trim(), 'Abstract');
-    assert.equal(current.getAttribute('aria-current'), 'page');
-    assert.equal(current.hasAttribute('href'), false);
+    assert.equal(normalizeInlineText(root.textContent), 'AlphaXiv');
+    assert.deepEqual(getSwitchTargets(root), [
+        {
+            target: 'alphaxiv',
+            text: 'AlphaXiv',
+            href: 'https://www.alphaxiv.org/abs/1706.03762',
+            ariaLabel: null,
+            title: null
+        }
+    ]);
+});
+
+test('renderSwitcher keeps arXiv HTML switcher clean without visual separators', () => {
+    const dom = createDom('<main></main>', 'https://arxiv.org/html/1706.03762');
+    const state = parsePaperLocation('https://arxiv.org/html/1706.03762');
+    const root = renderSwitcher(dom.window.document, state, buildTargets(state));
+
+    assert.equal(normalizeInlineText(root.textContent), 'AlphaXiv');
+    assert.equal(root.textContent.includes('|'), false);
 });
 
 test('installSwitcher inserts arXiv abs row after Access Paper links and before view license', () => {
@@ -408,8 +584,9 @@ test('installSwitcher inserts arXiv abs row after Access Paper links and before 
     installSwitcher({ document, url: 'https://arxiv.org/abs/1706.03762' });
 
     const switcher = document.querySelector('[data-alphaxiv-switcher]');
-    assert.equal(links.nextElementSibling, switcher);
-    assert.equal(switcher.nextElementSibling, license);
+    assert.equal(switcher.parentElement, links);
+    assert.equal(links.lastElementChild, switcher);
+    assert.equal(links.nextElementSibling, license);
 });
 
 test('installSwitcher inserts arXiv abs row before a nested license block on the real page structure', () => {
@@ -426,8 +603,10 @@ test('installSwitcher inserts arXiv abs row before a nested license block on the
     });
 
     const switcher = document.querySelector('[data-alphaxiv-switcher]');
-    assert.equal(links.nextElementSibling, switcher);
-    assert.equal(switcher.nextElementSibling, licenseBlock);
+    assert.equal(switcher.parentElement, links);
+    assert.equal(links.lastElementChild, switcher);
+    assert.equal(links.nextElementSibling, licenseBlock);
+    assert.equal(switcher.style.marginInlineStart, '');
 });
 
 test('installSwitcher inserts an old-style arXiv abs row when Access Paper only exposes View PDF', () => {
@@ -443,18 +622,16 @@ test('installSwitcher inserts an old-style arXiv abs row when Access Paper only 
 
     const switcher = document.querySelector('[data-alphaxiv-switcher]');
     assert.ok(switcher);
-    assert.equal(links.nextElementSibling, switcher);
-    assert.equal(switcher.nextElementSibling, licenseBlock);
+    assert.equal(switcher.parentElement, links);
+    assert.equal(links.lastElementChild, switcher);
+    assert.equal(links.nextElementSibling, licenseBlock);
     assert.deepEqual(getSwitchTargets(switcher), [
         {
             target: 'alphaxiv',
             text: 'AlphaXiv',
-            href: 'https://www.alphaxiv.org/abs/cs/0112017'
-        },
-        {
-            target: 'arxiv-abs',
-            text: 'Abstract',
-            href: null
+            href: 'https://www.alphaxiv.org/abs/cs/0112017',
+            ariaLabel: null,
+            title: null
         }
     ]);
 });
@@ -470,6 +647,29 @@ test('installSwitcher inserts arXiv HTML switcher after Back to abstract page an
     const switcher = document.querySelector('[data-alphaxiv-switcher]');
     assert.equal(backLink.nextElementSibling, switcher);
     assert.equal(switcher.nextElementSibling, downloadLink);
+    assert.equal(switcher.previousSibling, backLink);
+    assert.equal(switcher.nextSibling, downloadLink);
+    assert.equal(switcher.tagName, 'A');
+
+    const navText = normalizeInlineText(document.getElementById('html-nav').textContent);
+    assert.equal(navText.includes('|'), false);
+    assert.equal(normalizeInlineText(switcher.textContent), 'AlphaXiv');
+    assert.equal(switcher.style.marginInline, '');
+});
+
+test('installSwitcher uses the correct AlphaXiv icon toolbar when the page has multiple Hide Tools controls', () => {
+    const dom = createDom(
+        createAlphaXivMultipleHideToolsFixture(),
+        'https://www.alphaxiv.org/abs/2502.11374'
+    );
+    const { document } = dom.window;
+    const targetLeftToolbar = document.getElementById('alpha-target-left-toolbar');
+
+    installSwitcher({ document, url: 'https://www.alphaxiv.org/abs/2502.11374' });
+
+    const switcher = document.querySelector('[data-alphaxiv-switcher]');
+    assert.ok(switcher);
+    assert.equal(switcher.parentElement, targetLeftToolbar);
 });
 
 test('installSwitcher inserts arXiv HTML switcher after Back to Abstract on the current page copy', () => {
@@ -486,6 +686,53 @@ test('installSwitcher inserts arXiv HTML switcher after Back to Abstract on the 
     assert.equal(switcher.nextElementSibling, downloadLink);
 });
 
+test('installSwitcher inserts arXiv HTML switcher without throwing when Download PDF link is missing', () => {
+    const dom = createDom(
+        createArxivHtmlWithoutDownloadFixture(),
+        'https://arxiv.org/html/1706.03762v7'
+    );
+    const { document } = dom.window;
+    const backLink = document.getElementById('back-to-abstract');
+    const toggleReading = document.getElementById('toggle-reading');
+
+    assert.doesNotThrow(() => {
+        installSwitcher({ document, url: 'https://arxiv.org/html/1706.03762v7' });
+    });
+
+    const switcher = document.querySelector('[data-alphaxiv-switcher]');
+    assert.ok(switcher);
+    assert.equal(backLink.nextSibling, switcher);
+    assert.equal(switcher.nextSibling, toggleReading);
+    assert.equal(switcher.tagName, 'A');
+});
+
+test('installSwitcher re-injects AlphaXiv icon buttons if a transient rerender removes them', () => {
+    const dom = createDom(
+        createAlphaXivLeftToolbarFixture(),
+        'https://www.alphaxiv.org/abs/1706.03762'
+    );
+    const { document } = dom.window;
+    const harness = createAsyncInstallHarness();
+
+    installSwitcher({
+        document,
+        url: 'https://www.alphaxiv.org/abs/1706.03762',
+        MutationObserver: harness.MutationObserver,
+        setTimeout: harness.setTimeout,
+        clearTimeout: harness.clearTimeout
+    });
+
+    const firstSwitcher = document.querySelector('[data-alphaxiv-switcher]');
+    assert.ok(firstSwitcher);
+    assert.equal(harness.observers.length >= 1, true);
+
+    firstSwitcher.remove();
+    harness.observers[0].trigger();
+
+    const reinjectedSwitcher = document.querySelector('[data-alphaxiv-switcher]');
+    assert.ok(reinjectedSwitcher);
+});
+
 test('installSwitcher keeps only one switcher when run twice on the same document', () => {
     const dom = createDom(
         createAlphaXivPrimaryFixture(),
@@ -497,6 +744,37 @@ test('installSwitcher keeps only one switcher when run twice on the same documen
     installSwitcher({ document, url: 'https://www.alphaxiv.org/abs/1706.03762' });
 
     assert.equal(document.querySelectorAll('[data-alphaxiv-switcher]').length, 1);
+});
+
+test('installSwitcher injects AlphaXiv links into left icon toolbar when available', () => {
+    const dom = createDom(
+        createAlphaXivLeftToolbarFixture(),
+        'https://www.alphaxiv.org/abs/1706.03762'
+    );
+    const { document } = dom.window;
+    const leftToolbar = document.getElementById('alpha-left-toolbar');
+
+    installSwitcher({ document, url: 'https://www.alphaxiv.org/abs/1706.03762' });
+
+    const switcher = document.querySelector('[data-alphaxiv-switcher]');
+    assert.ok(switcher);
+    assert.equal(switcher.parentElement, leftToolbar);
+    assert.deepEqual(getSwitchTargets(switcher), [
+        {
+            target: 'arxiv-abs',
+            text: 'A',
+            href: 'https://arxiv.org/abs/1706.03762',
+            ariaLabel: 'Open arXiv abstract',
+            title: 'arXiv Abstract'
+        },
+        {
+            target: 'arxiv-html',
+            text: 'H',
+            href: 'https://arxiv.org/html/1706.03762',
+            ariaLabel: 'Open arXiv HTML',
+            title: 'arXiv HTML'
+        }
+    ]);
 });
 
 test('installSwitcher does not migrate a fallback switcher when primary mount appears later', () => {
@@ -546,8 +824,9 @@ test('installSwitcher injects after a delayed mount appears through observed DOM
     const links = document.getElementById('access-paper-links');
     const license = document.getElementById('view-license');
 
-    assert.equal(links.nextElementSibling, switcher);
-    assert.equal(switcher.nextElementSibling, license);
+    assert.equal(switcher.parentElement, links);
+    assert.equal(links.lastElementChild, switcher);
+    assert.equal(links.nextElementSibling, license);
 });
 
 test('installSwitcher disconnects the observer and clears the timeout after delayed injection succeeds', () => {

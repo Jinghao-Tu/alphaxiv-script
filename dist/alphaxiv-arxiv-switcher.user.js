@@ -87,18 +87,26 @@ function renderSwitcher(document, state, targets) {
         return null;
     }
 
+    if (state.pageType === 'arxiv-html' && items.length === 1) {
+        const singleLink = createItemElement(document, items[0]);
+        singleLink.setAttribute('data-alphaxiv-switcher', '');
+        return singleLink;
+    }
+
     const root = document.createElement(state.pageType === 'arxiv-abs' ? 'div' : 'span');
     root.setAttribute('data-alphaxiv-switcher', '');
 
-    if (state.pageType === 'alphaxiv' || state.pageType === 'arxiv-html') {
-        root.style.marginInlineStart = '0.75rem';
+    if (state.pageType === 'alphaxiv') {
+        root.style.marginInlineStart = '0.5rem';
+        root.style.display = 'inline-flex';
+        root.style.alignItems = 'center';
+        root.style.gap = '0.5rem';
+        appendItems(document, root, items, '');
+        return root;
     }
 
     if (state.pageType === 'arxiv-abs') {
-        const label = document.createElement('span');
-        label.textContent = 'View on:';
-        root.append(label, document.createTextNode(' '));
-        appendItems(document, root, items, ' | ');
+        appendItems(document, root, items, '');
         return root;
     }
 
@@ -133,6 +141,16 @@ function installSwitcher({
     const switcher = tryInstallSwitcher(document, state, targets);
 
     if (switcher) {
+        if (state.pageType === 'alphaxiv') {
+            startAlphaXivPersistenceObserver({
+                document,
+                state,
+                targets,
+                MutationObserverImplementation,
+                setTimeoutImplementation
+            });
+        }
+
         return switcher;
     }
 
@@ -205,13 +223,25 @@ function tryInstallSwitcher(document, state, targets) {
         return null;
     }
 
-    if (mountPoint.insertBefore) {
-        mountPoint.container.insertBefore(switcher, mountPoint.insertBefore);
-        return switcher;
+    const mountReadySwitcher = normalizeSwitcherForMount(document, switcher, state.pageType, mountPoint);
+
+    if (!mountReadySwitcher) {
+        return null;
     }
 
-    mountPoint.container.appendChild(switcher);
-    return switcher;
+    applyMountPresentation(mountReadySwitcher, mountPoint, state.pageType);
+
+    if (state.pageType === 'arxiv-html') {
+        trimArxivHtmlWhitespaceAroundMount(mountPoint);
+    }
+
+    if (mountPoint.insertBefore) {
+        mountPoint.container.insertBefore(mountReadySwitcher, mountPoint.insertBefore);
+        return mountReadySwitcher;
+    }
+
+    mountPoint.container.appendChild(mountReadySwitcher);
+    return mountReadySwitcher;
 }
 
 function resolvePageType(parsedUrl) {
@@ -234,6 +264,16 @@ function resolvePageType(parsedUrl) {
 }
 
 function findAlphaXivMount(document) {
+    const hideToolsControls = findHideToolsControls(document);
+
+    for (const hideToolsControl of hideToolsControls) {
+        const leftToolbarMount = findAlphaXivLeftToolbarMount(hideToolsControl);
+
+        if (leftToolbarMount) {
+            return leftToolbarMount;
+        }
+    }
+
     const navGroup = findSmallestMatchingElement(
         document,
         'div, section, nav, header, main',
@@ -256,20 +296,57 @@ function findAlphaXivMount(document) {
         }
     }
 
-    const hideToolsControl = Array.from(document.querySelectorAll('button, a, span')).find((element) => (
-        normalizeText(element.textContent).includes('Hide Tools')
-    ));
+    if (hideToolsControls.length === 0) {
+        return null;
+    }
 
+    const fallbackControl = hideToolsControls.find((element) => (
+        /Ctrl\s*\+\s*\//i.test(normalizeText(element.textContent))
+    )) ?? hideToolsControls[0];
+
+    return {
+        container: fallbackControl.closest('div, section, aside, header, nav')
+            ?? fallbackControl.parentElement
+            ?? fallbackControl,
+        strategy: 'alphaxiv-fallback'
+    };
+}
+
+function findAlphaXivLeftToolbarMount(hideToolsControl) {
     if (!hideToolsControl) {
         return null;
     }
 
-    return {
-        container: hideToolsControl.closest('div, section, aside, header, nav')
-            ?? hideToolsControl.parentElement
-            ?? hideToolsControl,
-        strategy: 'alphaxiv-fallback'
-    };
+    let current = hideToolsControl;
+
+    while (current) {
+        const parent = current.parentElement;
+
+        if (!parent) {
+            break;
+        }
+
+        const siblings = Array.from(parent.children);
+        const currentIndex = siblings.indexOf(current);
+        const leftToolbarContainer = siblings
+            .slice(0, currentIndex)
+            .reverse()
+            .find((sibling) => (
+                isAlphaXivLeftToolbarContainer(sibling)
+                && isAlphaXivToolbarRow(parent, current, sibling)
+            ));
+
+        if (leftToolbarContainer) {
+            return {
+                container: leftToolbarContainer,
+                strategy: 'alphaxiv-left-toolbar'
+            };
+        }
+
+        current = parent;
+    }
+
+    return null;
 }
 
 function findArxivAbsMount(document) {
@@ -297,6 +374,14 @@ function findArxivAbsMount(document) {
         return null;
     }
 
+    if (linkList.tagName === 'UL' || linkList.tagName === 'OL') {
+        return {
+            container: linkList,
+            strategy: 'in-access-paper-list',
+            insertBefore: null
+        };
+    }
+
     const licenseLink = Array.from(container.querySelectorAll('a')).find((element) => (
         normalizeText(element.textContent).toLowerCase() === 'view license'
     ));
@@ -305,7 +390,8 @@ function findArxivAbsMount(document) {
     return {
         container,
         strategy: 'after-access-paper-list',
-        insertBefore: insertBefore ?? null
+        insertBefore: insertBefore ?? null,
+        linkListTag: linkList.tagName
     };
 }
 
@@ -331,7 +417,9 @@ function findArxivHtmlMount(document) {
     return {
         container,
         strategy: 'after-back-to-abstract-link',
-        insertBefore: downloadLink ?? backLink.nextSibling ?? null
+        insertBefore: downloadLink ?? backLink.nextSibling ?? null,
+        afterLink: backLink,
+        beforeLink: downloadLink ?? null
     };
 }
 
@@ -340,15 +428,19 @@ function buildRenderItems(state, targets) {
         return [
             targets.arxivAbs && {
                 href: targets.arxivAbs,
-                label: 'arXiv Abs',
+                label: 'A',
+                title: 'arXiv Abstract',
+                ariaLabel: 'Open arXiv abstract',
                 target: 'arxiv-abs',
-                type: 'link'
+                type: 'icon-link'
             },
             targets.arxivHtml && {
                 href: targets.arxivHtml,
-                label: 'arXiv HTML',
+                label: 'H',
+                title: 'arXiv HTML',
+                ariaLabel: 'Open arXiv HTML',
                 target: 'arxiv-html',
-                type: 'link'
+                type: 'icon-link'
             }
         ].filter(Boolean);
     }
@@ -359,17 +451,6 @@ function buildRenderItems(state, targets) {
                 href: targets.alphaxiv,
                 label: 'AlphaXiv',
                 target: 'alphaxiv',
-                type: 'link'
-            },
-            {
-                label: 'Abstract',
-                target: 'arxiv-abs',
-                type: 'current'
-            },
-            targets.arxivHtml && {
-                href: targets.arxivHtml,
-                label: 'HTML',
-                target: 'arxiv-html',
                 type: 'link'
             }
         ].filter(Boolean);
@@ -391,7 +472,7 @@ function buildRenderItems(state, targets) {
 
 function appendItems(document, root, items, separator) {
     items.forEach((item, index) => {
-        if (index > 0) {
+        if (index > 0 && separator) {
             root.append(document.createTextNode(separator));
         }
 
@@ -411,6 +492,28 @@ function createItemElement(document, item) {
     }
 
     element.href = item.href;
+
+    if (item.type === 'icon-link') {
+        element.setAttribute('aria-label', item.ariaLabel);
+        element.setAttribute('title', item.title);
+        element.style.display = 'inline-flex';
+        element.style.alignItems = 'center';
+        element.style.justifyContent = 'center';
+        element.style.boxSizing = 'border-box';
+        element.style.minInlineSize = '1.5rem';
+        element.style.blockSize = '1.35rem';
+        element.style.paddingInline = '0.34rem';
+        element.style.borderRadius = '0.45rem';
+        element.style.border = '1px solid #cbd5e1';
+        element.style.backgroundColor = '#f8fafc';
+        element.style.color = '#334155';
+        element.style.fontSize = '0.72rem';
+        element.style.fontWeight = '600';
+        element.style.letterSpacing = '0.01em';
+        element.style.lineHeight = '1';
+        element.style.textDecoration = 'none';
+    }
+
     return element;
 }
 
@@ -436,6 +539,151 @@ function isAlphaXivActionsContainer(element) {
         element.querySelectorAll('button').length > 0
         || /Hide Tools/i.test(normalizeText(element.textContent))
     );
+}
+
+function isAlphaXivLeftToolbarContainer(element) {
+    if (!element) {
+        return false;
+    }
+
+    const text = normalizeText(element.textContent);
+
+    if (/Hide Tools/i.test(text) || hasRequiredTexts(element, ['Paper', 'Blog', 'Resources'])) {
+        return false;
+    }
+
+    const buttonCount = element.querySelectorAll('button').length;
+    const interactiveCount = element.querySelectorAll('button, a').length;
+    const iconSignalCount = element.querySelectorAll('img, svg, [aria-label]').length;
+
+    return buttonCount >= 1 && interactiveCount >= 2 && iconSignalCount >= 2;
+}
+
+function isAlphaXivToolbarRow(parent, hideToolsGroup, leftToolbarContainer) {
+    const siblings = Array.from(parent.children);
+
+    if (siblings.length < 3) {
+        return false;
+    }
+
+    return siblings.some((sibling) => (
+        sibling !== hideToolsGroup
+        && sibling !== leftToolbarContainer
+        && isAlphaXivCenterControlsContainer(sibling)
+    ));
+}
+
+function isAlphaXivCenterControlsContainer(element) {
+    const text = normalizeText(element.textContent);
+    const hasPageProgressPattern = /\d+\s*\/\s*(?:\d+|-)|\/\s*-/.test(text);
+    const hasInputControl = element.querySelectorAll('input, textarea').length > 0;
+
+    return hasPageProgressPattern || hasInputControl;
+}
+
+function findHideToolsControls(document) {
+    return Array.from(document.querySelectorAll('button, a, span')).filter((element) => (
+        normalizeText(element.textContent).includes('Hide Tools')
+    ));
+}
+
+function applyMountPresentation(switcher, mountPoint, pageType) {
+    if (pageType === 'arxiv-abs') {
+        if (mountPoint.strategy === 'in-access-paper-list') {
+            return;
+        }
+
+        switcher.style.display = 'block';
+        switcher.style.marginBlockStart = '0.2rem';
+
+        if (mountPoint.linkListTag === 'UL' || mountPoint.linkListTag === 'OL') {
+            switcher.style.marginInlineStart = '1.25rem';
+        }
+    }
+
+    if (pageType === 'arxiv-html') {
+        const neighborClassName = mountPoint.afterLink?.getAttribute?.('class') ?? '';
+
+        if (neighborClassName && !switcher.getAttribute('class')) {
+            switcher.setAttribute('class', neighborClassName);
+        }
+
+        switcher.style.whiteSpace = 'nowrap';
+    }
+}
+
+function normalizeSwitcherForMount(document, switcher, pageType, mountPoint) {
+    if (pageType !== 'arxiv-abs' || mountPoint.strategy !== 'in-access-paper-list') {
+        return switcher;
+    }
+
+    const listItem = document.createElement('li');
+    listItem.setAttribute('data-alphaxiv-switcher', '');
+
+    while (switcher.firstChild) {
+        listItem.appendChild(switcher.firstChild);
+    }
+
+    return listItem;
+}
+
+function startAlphaXivPersistenceObserver({
+    document,
+    state,
+    targets,
+    MutationObserverImplementation,
+    setTimeoutImplementation
+}) {
+    if (
+        state.pageType !== 'alphaxiv'
+        || typeof MutationObserverImplementation !== 'function'
+        || typeof setTimeoutImplementation !== 'function'
+    ) {
+        return;
+    }
+
+    const observer = new MutationObserverImplementation(() => {
+        if (document.querySelector(SWITCHER_SELECTOR)) {
+            return;
+        }
+
+        tryInstallSwitcher(document, state, targets);
+    });
+
+    observer.observe(document.documentElement ?? document.body ?? document, {
+        childList: true,
+        subtree: true
+    });
+
+    setTimeoutImplementation(() => {
+        observer.disconnect();
+    }, INSTALL_TIMEOUT_MS);
+}
+
+function trimArxivHtmlWhitespaceAroundMount(mountPoint) {
+    if (mountPoint.strategy !== 'after-back-to-abstract-link') {
+        return;
+    }
+
+    const afterWhitespaceNode = mountPoint.afterLink?.nextSibling;
+
+    if (isWhitespaceTextNode(afterWhitespaceNode)) {
+        if (mountPoint.insertBefore === afterWhitespaceNode) {
+            mountPoint.insertBefore = afterWhitespaceNode.nextSibling ?? null;
+        }
+
+        afterWhitespaceNode.remove();
+    }
+
+    const beforeWhitespaceNode = mountPoint.insertBefore?.previousSibling;
+
+    if (isWhitespaceTextNode(beforeWhitespaceNode)) {
+        beforeWhitespaceNode.remove();
+    }
+}
+
+function isWhitespaceTextNode(node) {
+    return node?.nodeType === 3 && normalizeText(node.textContent ?? '') === '';
 }
 
 function isBackToAbstractLabel(text) {
