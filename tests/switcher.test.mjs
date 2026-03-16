@@ -269,6 +269,31 @@ function createArxivHtmlWithoutDownloadFixture() {
     `;
 }
 
+function createAr5ivFixture() {
+    return `
+        <main>
+            <header id="ar5iv-header">
+                <nav id="ar5iv-nav" class="ltx_page_navbar">
+                    <a id="abstract-link" href="https://arxiv.org/abs/1706.03762">Abstract</a>
+                    <a id="download-pdf" href="/pdf/1706.03762">Download PDF</a>
+                </nav>
+            </header>
+        </main>
+    `;
+}
+
+function createAr5ivWithoutDownloadFixture() {
+    return `
+        <main>
+            <header id="ar5iv-header">
+                <nav id="ar5iv-nav" class="ltx_page_navbar">
+                    <a id="abstract-link" href="https://arxiv.org/abs/1706.03762v3">Abstract</a>
+                </nav>
+            </header>
+        </main>
+    `;
+}
+
 function createAsyncInstallHarness() {
     const observers = [];
     const timers = new Map();
@@ -355,7 +380,8 @@ test('build targets for old-style abs hides html target', () => {
     assert.deepEqual(buildTargets(state), {
         alphaxiv: 'https://www.alphaxiv.org/abs/cs/0112017',
         arxivAbs: null,
-        arxivHtml: null
+        arxivHtml: null,
+        ar5iv: 'https://ar5iv.org/abs/cs/0112017'
     });
 });
 
@@ -365,7 +391,8 @@ test('preserves version when building html target from versioned abs input', () 
     assert.deepEqual(buildTargets(state), {
         alphaxiv: 'https://www.alphaxiv.org/abs/1706.03762',
         arxivAbs: null,
-        arxivHtml: 'https://arxiv.org/html/1706.03762v7'
+        arxivHtml: 'https://arxiv.org/html/1706.03762v7',
+        ar5iv: 'https://ar5iv.org/abs/1706.03762'
     });
 });
 
@@ -375,7 +402,8 @@ test('preserves version when building abs target from versioned html input', () 
     assert.deepEqual(buildTargets(state), {
         alphaxiv: 'https://www.alphaxiv.org/abs/1706.03762',
         arxivAbs: 'https://arxiv.org/abs/1706.03762v7',
-        arxivHtml: null
+        arxivHtml: null,
+        ar5iv: 'https://ar5iv.org/abs/1706.03762'
     });
 });
 
@@ -394,7 +422,8 @@ test('builds arxiv targets from AlphaXiv new-style input', () => {
     assert.deepEqual(buildTargets(state), {
         alphaxiv: null,
         arxivAbs: 'https://arxiv.org/abs/1706.03762',
-        arxivHtml: 'https://arxiv.org/html/1706.03762'
+        arxivHtml: 'https://arxiv.org/html/1706.03762',
+        ar5iv: 'https://ar5iv.org/abs/1706.03762'
     });
 });
 
@@ -404,7 +433,8 @@ test('builds only abs target from AlphaXiv old-style input', () => {
     assert.deepEqual(buildTargets(state), {
         alphaxiv: null,
         arxivAbs: 'https://arxiv.org/abs/cs/0112017',
-        arxivHtml: null
+        arxivHtml: null,
+        ar5iv: 'https://ar5iv.org/abs/cs/0112017'
     });
 });
 
@@ -503,7 +533,7 @@ test('renderSwitcher renders two links for AlphaXiv new-style pages', () => {
     assert.equal(root.getAttribute('data-alphaxiv-switcher'), '');
     assert.equal(root.style.gap, '0.5rem');
     const iconLinks = root.querySelectorAll('a[data-switch-target]');
-    assert.equal(iconLinks.length, 2);
+    assert.equal(iconLinks.length, 3);
 
     for (const iconLink of iconLinks) {
         assert.equal(iconLink.style.minInlineSize, '1.5rem');
@@ -526,6 +556,13 @@ test('renderSwitcher renders two links for AlphaXiv new-style pages', () => {
             href: 'https://arxiv.org/html/1706.03762',
             ariaLabel: 'Open arXiv HTML',
             title: 'arXiv HTML'
+        },
+        {
+            target: 'ar5iv',
+            text: '5',
+            href: 'https://ar5iv.org/abs/1706.03762',
+            ariaLabel: 'Open ar5iv',
+            title: 'ar5iv'
         }
     ]);
 });
@@ -545,21 +582,34 @@ test('renderSwitcher omits HTML target for AlphaXiv old-style pages', () => {
             href: 'https://arxiv.org/abs/cs/0112017',
             ariaLabel: 'Open arXiv abstract',
             title: 'arXiv Abstract'
+        },
+        {
+            target: 'ar5iv',
+            text: '5',
+            href: 'https://ar5iv.org/abs/cs/0112017',
+            ariaLabel: 'Open ar5iv',
+            title: 'ar5iv'
         }
     ]);
 });
 
-test('renderSwitcher keeps arXiv abs panel minimal with only AlphaXiv link', () => {
+test('renderSwitcher keeps arXiv abs panel with AlphaXiv and ar5iv links', () => {
     const dom = createDom('<main></main>', 'https://arxiv.org/abs/1706.03762');
     const state = parsePaperLocation('https://arxiv.org/abs/1706.03762');
     const root = renderSwitcher(dom.window.document, state, buildTargets(state));
 
-    assert.equal(normalizeInlineText(root.textContent), 'AlphaXiv');
     assert.deepEqual(getSwitchTargets(root), [
         {
             target: 'alphaxiv',
             text: 'AlphaXiv',
             href: 'https://www.alphaxiv.org/abs/1706.03762',
+            ariaLabel: null,
+            title: null
+        },
+        {
+            target: 'ar5iv',
+            text: 'ar5iv',
+            href: 'https://ar5iv.org/abs/1706.03762',
             ariaLabel: null,
             title: null
         }
@@ -571,8 +621,23 @@ test('renderSwitcher keeps arXiv HTML switcher clean without visual separators',
     const state = parsePaperLocation('https://arxiv.org/html/1706.03762');
     const root = renderSwitcher(dom.window.document, state, buildTargets(state));
 
-    assert.equal(normalizeInlineText(root.textContent), 'AlphaXiv');
     assert.equal(root.textContent.includes('|'), false);
+    assert.deepEqual(getSwitchTargets(root), [
+        {
+            target: 'alphaxiv',
+            text: 'AlphaXiv',
+            href: 'https://www.alphaxiv.org/abs/1706.03762',
+            ariaLabel: null,
+            title: null
+        },
+        {
+            target: 'ar5iv',
+            text: 'ar5iv',
+            href: 'https://ar5iv.org/abs/1706.03762',
+            ariaLabel: null,
+            title: null
+        }
+    ]);
 });
 
 test('installSwitcher inserts arXiv abs row after Access Paper links and before view license', () => {
@@ -632,6 +697,13 @@ test('installSwitcher inserts an old-style arXiv abs row when Access Paper only 
             href: 'https://www.alphaxiv.org/abs/cs/0112017',
             ariaLabel: null,
             title: null
+        },
+        {
+            target: 'ar5iv',
+            text: 'ar5iv',
+            href: 'https://ar5iv.org/abs/cs/0112017',
+            ariaLabel: null,
+            title: null
         }
     ]);
 });
@@ -649,11 +721,26 @@ test('installSwitcher inserts arXiv HTML switcher after Back to abstract page an
     assert.equal(switcher.nextElementSibling, downloadLink);
     assert.equal(switcher.previousSibling, backLink);
     assert.equal(switcher.nextSibling, downloadLink);
-    assert.equal(switcher.tagName, 'A');
+    assert.equal(switcher.tagName, 'SPAN');
 
     const navText = normalizeInlineText(document.getElementById('html-nav').textContent);
     assert.equal(navText.includes('|'), false);
-    assert.equal(normalizeInlineText(switcher.textContent), 'AlphaXiv');
+    assert.deepEqual(getSwitchTargets(switcher), [
+        {
+            target: 'alphaxiv',
+            text: 'AlphaXiv',
+            href: 'https://www.alphaxiv.org/abs/1706.03762',
+            ariaLabel: null,
+            title: null
+        },
+        {
+            target: 'ar5iv',
+            text: 'ar5iv',
+            href: 'https://ar5iv.org/abs/1706.03762',
+            ariaLabel: null,
+            title: null
+        }
+    ]);
     assert.equal(switcher.style.marginInline, '');
 });
 
@@ -703,7 +790,7 @@ test('installSwitcher inserts arXiv HTML switcher without throwing when Download
     assert.ok(switcher);
     assert.equal(backLink.nextSibling, switcher);
     assert.equal(switcher.nextSibling, toggleReading);
-    assert.equal(switcher.tagName, 'A');
+    assert.equal(switcher.tagName, 'SPAN');
 });
 
 test('installSwitcher re-injects AlphaXiv icon buttons if a transient rerender removes them', () => {
@@ -773,6 +860,13 @@ test('installSwitcher injects AlphaXiv links into left icon toolbar when availab
             href: 'https://arxiv.org/html/1706.03762',
             ariaLabel: 'Open arXiv HTML',
             title: 'arXiv HTML'
+        },
+        {
+            target: 'ar5iv',
+            text: '5',
+            href: 'https://ar5iv.org/abs/1706.03762',
+            ariaLabel: 'Open ar5iv',
+            title: 'ar5iv'
         }
     ]);
 });
@@ -890,6 +984,253 @@ test('installSwitcher disconnects the observer after delayed mount times out', (
     assert.equal(harness.observers[0].disconnectCalls, 1);
 });
 
+test('parse ar5iv URL without version', () => {
+    assert.deepEqual(parsePaperLocation('https://ar5iv.org/abs/1706.03762'), {
+        pageType: 'ar5iv',
+        baseId: '1706.03762',
+        version: null,
+        idStyle: 'new'
+    });
+});
+
+test('parse ar5iv URL with version', () => {
+    assert.deepEqual(parsePaperLocation('https://ar5iv.org/abs/1706.03762v7'), {
+        pageType: 'ar5iv',
+        baseId: '1706.03762',
+        version: 'v7',
+        idStyle: 'new'
+    });
+});
+
+test('parse old-style ar5iv URL', () => {
+    assert.deepEqual(parsePaperLocation('https://ar5iv.org/abs/cs/0112017v1'), {
+        pageType: 'ar5iv',
+        baseId: 'cs/0112017',
+        version: 'v1',
+        idStyle: 'old'
+    });
+});
+
+test('buildTargets sets ar5iv to null when already on ar5iv page', () => {
+    const state = parsePaperLocation('https://ar5iv.org/abs/1706.03762');
+
+    assert.deepEqual(buildTargets(state), {
+        alphaxiv: 'https://www.alphaxiv.org/abs/1706.03762',
+        arxivAbs: 'https://arxiv.org/abs/1706.03762',
+        arxivHtml: 'https://arxiv.org/html/1706.03762',
+        ar5iv: null
+    });
+});
+
+test('buildTargets includes ar5iv target from arxiv-abs page', () => {
+    const state = parsePaperLocation('https://arxiv.org/abs/1706.03762');
+
+    assert.deepEqual(buildTargets(state), {
+        alphaxiv: 'https://www.alphaxiv.org/abs/1706.03762',
+        arxivAbs: null,
+        arxivHtml: 'https://arxiv.org/html/1706.03762',
+        ar5iv: 'https://ar5iv.org/abs/1706.03762'
+    });
+});
+
+test('buildTargets includes ar5iv target from alphaxiv page', () => {
+    const state = parsePaperLocation('https://www.alphaxiv.org/abs/1706.03762');
+
+    assert.deepEqual(buildTargets(state), {
+        alphaxiv: null,
+        arxivAbs: 'https://arxiv.org/abs/1706.03762',
+        arxivHtml: 'https://arxiv.org/html/1706.03762',
+        ar5iv: 'https://ar5iv.org/abs/1706.03762'
+    });
+});
+
+test('buildTargets includes ar5iv target from arxiv-html page', () => {
+    const state = parsePaperLocation('https://arxiv.org/html/1706.03762v7');
+
+    assert.deepEqual(buildTargets(state), {
+        alphaxiv: 'https://www.alphaxiv.org/abs/1706.03762',
+        arxivAbs: 'https://arxiv.org/abs/1706.03762v7',
+        arxivHtml: null,
+        ar5iv: 'https://ar5iv.org/abs/1706.03762'
+    });
+});
+
+test('buildTargets strips version from ar5iv target', () => {
+    const state = parsePaperLocation('https://arxiv.org/abs/1706.03762v7');
+
+    assert.equal(buildTargets(state).ar5iv, 'https://ar5iv.org/abs/1706.03762');
+});
+
+test('findMountPoint finds ar5iv insertion point after Abstract link', () => {
+    const dom = createDom(createAr5ivFixture(), 'https://ar5iv.org/abs/1706.03762');
+    const mount = findMountPoint(dom.window.document, 'ar5iv');
+
+    assert.equal(mount.strategy, 'after-abstract-link');
+    assert.equal(mount.container.id, 'ar5iv-nav');
+    assert.equal(mount.insertBefore.id, 'download-pdf');
+});
+
+test('renderSwitcher renders three links for ar5iv new-style pages', () => {
+    const dom = createDom('<main></main>', 'https://ar5iv.org/abs/1706.03762');
+    const state = parsePaperLocation('https://ar5iv.org/abs/1706.03762');
+    const root = renderSwitcher(dom.window.document, state, buildTargets(state));
+
+    assert.equal(root.getAttribute('data-alphaxiv-switcher'), '');
+    assert.deepEqual(getSwitchTargets(root), [
+        {
+            target: 'alphaxiv',
+            text: 'AlphaXiv',
+            href: 'https://www.alphaxiv.org/abs/1706.03762',
+            ariaLabel: null,
+            title: null
+        },
+        {
+            target: 'arxiv-abs',
+            text: 'Abstract',
+            href: 'https://arxiv.org/abs/1706.03762',
+            ariaLabel: null,
+            title: null
+        },
+        {
+            target: 'arxiv-html',
+            text: 'arXiv HTML',
+            href: 'https://arxiv.org/html/1706.03762',
+            ariaLabel: null,
+            title: null
+        }
+    ]);
+});
+
+test('renderSwitcher renders two links for ar5iv old-style pages', () => {
+    const dom = createDom('<main></main>', 'https://ar5iv.org/abs/cs/0112017');
+    const state = parsePaperLocation('https://ar5iv.org/abs/cs/0112017');
+    const root = renderSwitcher(dom.window.document, state, buildTargets(state));
+
+    assert.deepEqual(getSwitchTargets(root), [
+        {
+            target: 'alphaxiv',
+            text: 'AlphaXiv',
+            href: 'https://www.alphaxiv.org/abs/cs/0112017',
+            ariaLabel: null,
+            title: null
+        },
+        {
+            target: 'arxiv-abs',
+            text: 'Abstract',
+            href: 'https://arxiv.org/abs/cs/0112017',
+            ariaLabel: null,
+            title: null
+        }
+    ]);
+});
+
+test('renderSwitcher renders three icon links for AlphaXiv new-style pages including ar5iv', () => {
+    const dom = createDom('<main></main>', 'https://www.alphaxiv.org/abs/1706.03762');
+    const state = parsePaperLocation('https://www.alphaxiv.org/abs/1706.03762');
+    const root = renderSwitcher(dom.window.document, state, buildTargets(state));
+
+    assert.deepEqual(getSwitchTargets(root), [
+        {
+            target: 'arxiv-abs',
+            text: 'A',
+            href: 'https://arxiv.org/abs/1706.03762',
+            ariaLabel: 'Open arXiv abstract',
+            title: 'arXiv Abstract'
+        },
+        {
+            target: 'arxiv-html',
+            text: 'H',
+            href: 'https://arxiv.org/html/1706.03762',
+            ariaLabel: 'Open arXiv HTML',
+            title: 'arXiv HTML'
+        },
+        {
+            target: 'ar5iv',
+            text: '5',
+            href: 'https://ar5iv.org/abs/1706.03762',
+            ariaLabel: 'Open ar5iv',
+            title: 'ar5iv'
+        }
+    ]);
+});
+
+test('renderSwitcher renders ar5iv and AlphaXiv text links on arxiv-abs page', () => {
+    const dom = createDom('<main></main>', 'https://arxiv.org/abs/1706.03762');
+    const state = parsePaperLocation('https://arxiv.org/abs/1706.03762');
+    const root = renderSwitcher(dom.window.document, state, buildTargets(state));
+
+    assert.deepEqual(getSwitchTargets(root), [
+        {
+            target: 'alphaxiv',
+            text: 'AlphaXiv',
+            href: 'https://www.alphaxiv.org/abs/1706.03762',
+            ariaLabel: null,
+            title: null
+        },
+        {
+            target: 'ar5iv',
+            text: 'ar5iv',
+            href: 'https://ar5iv.org/abs/1706.03762',
+            ariaLabel: null,
+            title: null
+        }
+    ]);
+});
+
+test('renderSwitcher renders ar5iv and AlphaXiv text links on arxiv-html page', () => {
+    const dom = createDom('<main></main>', 'https://arxiv.org/html/1706.03762');
+    const state = parsePaperLocation('https://arxiv.org/html/1706.03762');
+    const root = renderSwitcher(dom.window.document, state, buildTargets(state));
+
+    assert.deepEqual(getSwitchTargets(root), [
+        {
+            target: 'alphaxiv',
+            text: 'AlphaXiv',
+            href: 'https://www.alphaxiv.org/abs/1706.03762',
+            ariaLabel: null,
+            title: null
+        },
+        {
+            target: 'ar5iv',
+            text: 'ar5iv',
+            href: 'https://ar5iv.org/abs/1706.03762',
+            ariaLabel: null,
+            title: null
+        }
+    ]);
+});
+
+test('installSwitcher inserts ar5iv switcher after Abstract link and before Download PDF', () => {
+    const dom = createDom(createAr5ivFixture(), 'https://ar5iv.org/abs/1706.03762');
+    const { document } = dom.window;
+    const abstractLink = document.getElementById('abstract-link');
+    const downloadLink = document.getElementById('download-pdf');
+
+    installSwitcher({ document, url: 'https://ar5iv.org/abs/1706.03762' });
+
+    const switcher = document.querySelector('[data-alphaxiv-switcher]');
+    assert.ok(switcher);
+    assert.equal(abstractLink.nextElementSibling, switcher);
+    assert.equal(switcher.nextElementSibling, downloadLink);
+});
+
+test('installSwitcher inserts ar5iv switcher without throwing when Download PDF link is missing', () => {
+    const dom = createDom(
+        createAr5ivWithoutDownloadFixture(),
+        'https://ar5iv.org/abs/1706.03762v3'
+    );
+    const { document } = dom.window;
+    const abstractLink = document.getElementById('abstract-link');
+
+    assert.doesNotThrow(() => {
+        installSwitcher({ document, url: 'https://ar5iv.org/abs/1706.03762v3' });
+    });
+
+    const switcher = document.querySelector('[data-alphaxiv-switcher]');
+    assert.ok(switcher);
+    assert.equal(abstractLink.nextSibling, switcher);
+});
+
 test('build smoke test writes a distributable userscript with required metadata', () => {
     rmSync(DIST_FILE_PATH, { force: true });
 
@@ -910,7 +1251,8 @@ test('build smoke test writes a distributable userscript with required metadata'
         '@match        https://arxiv.org/abs/*',
         '@match        https://www.arxiv.org/abs/*',
         '@match        https://arxiv.org/html/*',
-        '@match        https://www.arxiv.org/html/*'
+        '@match        https://www.arxiv.org/html/*',
+        '@match        https://ar5iv.org/abs/*'
     ]) {
         assert.match(output, new RegExp(matchEntry.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
     }

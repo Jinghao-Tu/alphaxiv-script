@@ -19,6 +19,7 @@ const METADATA_HEADER = `// ==UserScript==
 // @match        https://www.arxiv.org/abs/*
 // @match        https://arxiv.org/html/*
 // @match        https://www.arxiv.org/html/*
+// @match        https://ar5iv.org/abs/*
 // @grant        none
 // ==/UserScript==`;
 

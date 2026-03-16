@@ -1,5 +1,6 @@
 const ALPHAXIV_ORIGIN = 'https://www.alphaxiv.org';
 const ARXIV_ORIGIN = 'https://arxiv.org';
+const AR5IV_ORIGIN = 'https://ar5iv.org';
 const SWITCHER_SELECTOR = '[data-alphaxiv-switcher]';
 const INSTALL_TIMEOUT_MS = 5000;
 
@@ -32,11 +33,13 @@ export function buildTargets(state) {
     const arxivAbs = `${ARXIV_ORIGIN}/abs/${versionedId}`;
     const arxivHtml = state.idStyle === 'old' ? null : `${ARXIV_ORIGIN}/html/${versionedId}`;
     const alphaxiv = `${ALPHAXIV_ORIGIN}/abs/${state.baseId}`;
+    const ar5iv = `${AR5IV_ORIGIN}/abs/${state.baseId}`;
 
     return {
         alphaxiv: state.pageType === 'alphaxiv' ? null : alphaxiv,
         arxivAbs: state.pageType === 'arxiv-abs' ? null : arxivAbs,
-        arxivHtml: state.pageType === 'arxiv-html' ? null : arxivHtml
+        arxivHtml: state.pageType === 'arxiv-html' ? null : arxivHtml,
+        ar5iv: state.pageType === 'ar5iv' ? null : ar5iv
     };
 }
 
@@ -57,6 +60,10 @@ export function findMountPoint(document, pageType) {
         return findArxivHtmlMount(document);
     }
 
+    if (pageType === 'ar5iv') {
+        return findAr5ivMount(document);
+    }
+
     return null;
 }
 
@@ -71,7 +78,7 @@ export function renderSwitcher(document, state, targets) {
         return null;
     }
 
-    if (state.pageType === 'arxiv-html' && items.length === 1) {
+    if ((state.pageType === 'arxiv-html' || state.pageType === 'ar5iv') && items.length === 1) {
         const singleLink = createItemElement(document, items[0]);
         singleLink.setAttribute('data-alphaxiv-switcher', '');
         return singleLink;
@@ -215,7 +222,7 @@ function tryInstallSwitcher(document, state, targets) {
 
     applyMountPresentation(mountReadySwitcher, mountPoint, state.pageType);
 
-    if (state.pageType === 'arxiv-html') {
+    if (state.pageType === 'arxiv-html' || state.pageType === 'ar5iv') {
         trimArxivHtmlWhitespaceAroundMount(mountPoint);
     }
 
@@ -242,6 +249,10 @@ function resolvePageType(parsedUrl) {
 
     if ((host === 'arxiv.org' || host === 'www.arxiv.org') && section === 'html') {
         return 'arxiv-html';
+    }
+
+    if (host === 'ar5iv.org' && section === 'abs') {
+        return 'ar5iv';
     }
 
     return null;
@@ -407,6 +418,34 @@ function findArxivHtmlMount(document) {
     };
 }
 
+function findAr5ivMount(document) {
+    const abstractLink = Array.from(document.querySelectorAll('a')).find((element) => (
+        /^Abstract$/i.test(normalizeText(element.textContent))
+    ));
+
+    if (!abstractLink) {
+        return null;
+    }
+
+    const container = abstractLink.closest('nav, header, div, section') ?? abstractLink.parentElement;
+
+    if (!container) {
+        return null;
+    }
+
+    const downloadLink = Array.from(container.querySelectorAll('a')).find((element) => (
+        normalizeText(element.textContent) === 'Download PDF'
+    ));
+
+    return {
+        container,
+        strategy: 'after-abstract-link',
+        insertBefore: downloadLink ?? abstractLink.nextSibling ?? null,
+        afterLink: abstractLink,
+        beforeLink: downloadLink ?? null
+    };
+}
+
 function buildRenderItems(state, targets) {
     if (state.pageType === 'alphaxiv') {
         return [
@@ -425,6 +464,14 @@ function buildRenderItems(state, targets) {
                 ariaLabel: 'Open arXiv HTML',
                 target: 'arxiv-html',
                 type: 'icon-link'
+            },
+            targets.ar5iv && {
+                href: targets.ar5iv,
+                label: '5',
+                title: 'ar5iv',
+                ariaLabel: 'Open ar5iv',
+                target: 'ar5iv',
+                type: 'icon-link'
             }
         ].filter(Boolean);
     }
@@ -436,6 +483,12 @@ function buildRenderItems(state, targets) {
                 label: 'AlphaXiv',
                 target: 'alphaxiv',
                 type: 'link'
+            },
+            targets.ar5iv && {
+                href: targets.ar5iv,
+                label: 'ar5iv',
+                target: 'ar5iv',
+                type: 'link'
             }
         ].filter(Boolean);
     }
@@ -446,6 +499,35 @@ function buildRenderItems(state, targets) {
                 href: targets.alphaxiv,
                 label: 'AlphaXiv',
                 target: 'alphaxiv',
+                type: 'link'
+            },
+            targets.ar5iv && {
+                href: targets.ar5iv,
+                label: 'ar5iv',
+                target: 'ar5iv',
+                type: 'link'
+            }
+        ].filter(Boolean);
+    }
+
+    if (state.pageType === 'ar5iv') {
+        return [
+            targets.alphaxiv && {
+                href: targets.alphaxiv,
+                label: 'AlphaXiv',
+                target: 'alphaxiv',
+                type: 'link'
+            },
+            targets.arxivAbs && {
+                href: targets.arxivAbs,
+                label: 'Abstract',
+                target: 'arxiv-abs',
+                type: 'link'
+            },
+            targets.arxivHtml && {
+                href: targets.arxivHtml,
+                label: 'arXiv HTML',
+                target: 'arxiv-html',
                 type: 'link'
             }
         ].filter(Boolean);
@@ -585,7 +667,7 @@ function applyMountPresentation(switcher, mountPoint, pageType) {
         }
     }
 
-    if (pageType === 'arxiv-html') {
+    if (pageType === 'arxiv-html' || pageType === 'ar5iv') {
         const neighborClassName = mountPoint.afterLink?.getAttribute?.('class') ?? '';
 
         if (neighborClassName && !switcher.getAttribute('class')) {
