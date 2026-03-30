@@ -7,6 +7,7 @@
 - AlphaXiv
 - arXiv Abstract
 - arXiv HTML
+- ar5iv HTML（仅提供跳转到 arXiv Abstract 和 AlphaXiv 的单向入口）
 
 ## 安装说明
 

@@ -2,12 +2,13 @@
 // @name         AlphaXiv / arXiv Switcher
 // @namespace    https://github.com/jht213/alphaxiv-script
 // @version      0.1.0
-// @description  Switch between AlphaXiv, arXiv abstract, and arXiv HTML pages
+// @description  Switch between AlphaXiv and arXiv pages, with outbound links on ar5iv HTML pages
 // @match        https://www.alphaxiv.org/abs/*
 // @match        https://arxiv.org/abs/*
 // @match        https://www.arxiv.org/abs/*
 // @match        https://arxiv.org/html/*
 // @match        https://www.arxiv.org/html/*
+// @match        https://ar5iv.labs.arxiv.org/html/*
 // @grant        none
 // ==/UserScript==
 
@@ -16,6 +17,7 @@
 
 const ALPHAXIV_ORIGIN = 'https://www.alphaxiv.org';
 const ARXIV_ORIGIN = 'https://arxiv.org';
+const AR5IV_ORIGIN = 'https://ar5iv.labs.arxiv.org';
 const SWITCHER_SELECTOR = '[data-alphaxiv-switcher]';
 const INSTALL_TIMEOUT_MS = 5000;
 
@@ -46,7 +48,11 @@ function buildTargets(state) {
 
     const versionedId = state.version ? `${state.baseId}${state.version}` : state.baseId;
     const arxivAbs = `${ARXIV_ORIGIN}/abs/${versionedId}`;
-    const arxivHtml = state.idStyle === 'old' ? null : `${ARXIV_ORIGIN}/html/${versionedId}`;
+    const arxivHtml = (
+        state.pageType === 'ar5iv-html' || state.idStyle === 'old'
+            ? null
+            : `${ARXIV_ORIGIN}/html/${versionedId}`
+    );
     const alphaxiv = `${ALPHAXIV_ORIGIN}/abs/${state.baseId}`;
 
     return {
@@ -73,6 +79,10 @@ function findMountPoint(document, pageType) {
         return findArxivHtmlMount(document);
     }
 
+    if (pageType === 'ar5iv-html') {
+        return findAr5ivMount(document);
+    }
+
     return null;
 }
 
@@ -93,7 +103,9 @@ function renderSwitcher(document, state, targets) {
         return singleLink;
     }
 
-    const root = document.createElement(state.pageType === 'arxiv-abs' ? 'div' : 'span');
+    const root = document.createElement(
+        state.pageType === 'arxiv-abs' || state.pageType === 'ar5iv-html' ? 'div' : 'span'
+    );
     root.setAttribute('data-alphaxiv-switcher', '');
 
     if (state.pageType === 'alphaxiv') {
@@ -106,6 +118,11 @@ function renderSwitcher(document, state, targets) {
     }
 
     if (state.pageType === 'arxiv-abs') {
+        appendItems(document, root, items, '');
+        return root;
+    }
+
+    if (state.pageType === 'ar5iv-html') {
         appendItems(document, root, items, '');
         return root;
     }
@@ -258,6 +275,10 @@ function resolvePageType(parsedUrl) {
 
     if ((host === 'arxiv.org' || host === 'www.arxiv.org') && section === 'html') {
         return 'arxiv-html';
+    }
+
+    if (host === new URL(AR5IV_ORIGIN).hostname && section === 'html') {
+        return 'ar5iv-html';
     }
 
     return null;
@@ -423,6 +444,20 @@ function findArxivHtmlMount(document) {
     };
 }
 
+function findAr5ivMount(document) {
+    const container = document.body ?? document.documentElement;
+
+    if (!container) {
+        return null;
+    }
+
+    return {
+        container,
+        strategy: 'ar5iv-floating-panel',
+        insertBefore: container.firstChild ?? null
+    };
+}
+
 function buildRenderItems(state, targets) {
     if (state.pageType === 'alphaxiv') {
         return [
@@ -467,6 +502,29 @@ function buildRenderItems(state, targets) {
         ].filter(Boolean);
     }
 
+    if (state.pageType === 'ar5iv-html') {
+        return [
+            targets.arxivAbs && {
+                href: targets.arxivAbs,
+                label: 'arXiv Abs',
+                accentColor: '#1d4ed8',
+                ariaLabel: 'Open arXiv abstract',
+                title: 'arXiv Abstract',
+                target: 'arxiv-abs',
+                type: 'floating-link'
+            },
+            targets.alphaxiv && {
+                href: targets.alphaxiv,
+                label: 'AlphaXiv',
+                accentColor: '#0f766e',
+                ariaLabel: 'Open AlphaXiv',
+                title: 'AlphaXiv',
+                target: 'alphaxiv',
+                type: 'floating-link'
+            }
+        ].filter(Boolean);
+    }
+
     return [];
 }
 
@@ -484,18 +542,23 @@ function createItemElement(document, item) {
     const element = document.createElement(item.type === 'current' ? 'span' : 'a');
 
     element.setAttribute('data-switch-target', item.target);
-    element.textContent = item.label;
+    element.setAttribute('data-switch-label', item.label);
 
     if (item.type === 'current') {
+        element.textContent = item.label;
         element.setAttribute('aria-current', 'page');
         return element;
     }
 
     element.href = item.href;
+    if (item.ariaLabel) {
+        element.setAttribute('aria-label', item.ariaLabel);
+    }
+    if (item.title) {
+        element.setAttribute('title', item.title);
+    }
 
     if (item.type === 'icon-link') {
-        element.setAttribute('aria-label', item.ariaLabel);
-        element.setAttribute('title', item.title);
         element.style.display = 'inline-flex';
         element.style.alignItems = 'center';
         element.style.justifyContent = 'center';
@@ -514,7 +577,99 @@ function createItemElement(document, item) {
         element.style.textDecoration = 'none';
     }
 
+    if (item.type === 'floating-link') {
+        decorateFloatingLink(document, element, item);
+        return element;
+    }
+
+    element.textContent = item.label;
     return element;
+}
+
+function decorateFloatingLink(document, element, item) {
+    const isDarkTheme = isDarkDocumentTheme(document);
+    const accentColor = item.accentColor ?? '#2563eb';
+    const panelBackground = isDarkTheme
+        ? `linear-gradient(180deg, ${withAlpha(accentColor, 0.16)} 0%, ${withAlpha(accentColor, 0.1)} 100%)`
+        : `linear-gradient(180deg, ${withAlpha(accentColor, 0.13)} 0%, ${withAlpha(accentColor, 0.07)} 100%)`;
+    const panelBackgroundHover = isDarkTheme
+        ? `linear-gradient(180deg, ${withAlpha(accentColor, 0.22)} 0%, ${withAlpha(accentColor, 0.14)} 100%)`
+        : `linear-gradient(180deg, ${withAlpha(accentColor, 0.18)} 0%, ${withAlpha(accentColor, 0.1)} 100%)`;
+    const panelBorder = 'transparent';
+    const restShadow = 'none';
+    const hoverShadow = isDarkTheme
+        ? `inset 0 0 0 1px ${withAlpha(accentColor, 0.24)}`
+        : `inset 0 0 0 1px ${withAlpha(accentColor, 0.18)}`;
+    const labelColor = isDarkTheme ? '#f8fafc' : '#0f172a';
+    const dotShellBackground = isDarkTheme
+        ? withAlpha(accentColor, 0.24)
+        : withAlpha(accentColor, 0.12);
+    const dotShellBorder = withAlpha(accentColor, isDarkTheme ? 0.28 : 0.18);
+
+    element.style.display = 'inline-flex';
+    element.style.alignItems = 'center';
+    element.style.gap = '0.34rem';
+    element.style.inlineSize = 'auto';
+    element.style.boxSizing = 'border-box';
+    element.style.padding = '0.26rem 0.46rem 0.26rem 0.34rem';
+    element.style.borderRadius = '0.8rem';
+    element.style.border = `1px solid ${panelBorder}`;
+    element.style.background = panelBackground;
+    element.style.boxShadow = restShadow;
+    element.style.color = labelColor;
+    element.style.textDecoration = 'none';
+    element.style.transition = 'transform 120ms ease, box-shadow 150ms ease, background 150ms ease, border-color 150ms ease';
+    element.style.pointerEvents = 'auto';
+    element.style.whiteSpace = 'nowrap';
+
+    const dotShell = document.createElement('span');
+    dotShell.style.display = 'inline-flex';
+    dotShell.style.alignItems = 'center';
+    dotShell.style.justifyContent = 'center';
+    dotShell.style.flex = '0 0 auto';
+    dotShell.style.inlineSize = '0.92rem';
+    dotShell.style.blockSize = '0.92rem';
+    dotShell.style.borderRadius = '999px';
+    dotShell.style.border = `1px solid ${dotShellBorder}`;
+    dotShell.style.background = dotShellBackground;
+
+    const dot = document.createElement('span');
+    dot.style.inlineSize = '0.38rem';
+    dot.style.blockSize = '0.38rem';
+    dot.style.borderRadius = '999px';
+    dot.style.background = accentColor;
+    dot.style.boxShadow = `0 0 0 0.14rem ${withAlpha(accentColor, isDarkTheme ? 0.14 : 0.09)}`;
+    dotShell.append(dot);
+
+    const label = document.createElement('span');
+    label.textContent = item.label;
+    label.style.fontSize = '0.71rem';
+    label.style.fontWeight = '650';
+    label.style.letterSpacing = '0.01em';
+    label.style.lineHeight = '1';
+    label.style.color = labelColor;
+
+    element.append(dotShell, label);
+
+    const applyInteractiveState = (active) => {
+        element.style.transform = active ? 'translateY(-0.5px)' : 'translateY(0)';
+        element.style.boxShadow = active ? hoverShadow : restShadow;
+        element.style.background = active ? panelBackgroundHover : panelBackground;
+        element.style.borderColor = active ? withAlpha(accentColor, isDarkTheme ? 0.48 : 0.32) : panelBorder;
+    };
+
+    element.addEventListener('mouseenter', () => {
+        applyInteractiveState(true);
+    });
+    element.addEventListener('mouseleave', () => {
+        applyInteractiveState(false);
+    });
+    element.addEventListener('focus', () => {
+        applyInteractiveState(true);
+    });
+    element.addEventListener('blur', () => {
+        applyInteractiveState(false);
+    });
 }
 
 function findSmallestMatchingElement(root, selector, predicate) {
@@ -609,6 +764,35 @@ function applyMountPresentation(switcher, mountPoint, pageType) {
         }
 
         switcher.style.whiteSpace = 'nowrap';
+    }
+
+    if (pageType === 'ar5iv-html') {
+        const isDarkTheme = isDarkDocumentTheme(switcher.ownerDocument);
+
+        switcher.style.position = 'fixed';
+        switcher.style.top = '0.58rem';
+        switcher.style.left = '0.58rem';
+        switcher.style.zIndex = '2147483647';
+        switcher.style.display = 'inline-flex';
+        switcher.style.flexDirection = 'row';
+        switcher.style.alignItems = 'center';
+        switcher.style.flexWrap = 'nowrap';
+        switcher.style.gap = '0.14rem';
+        switcher.style.padding = '0.18rem';
+        switcher.style.borderRadius = '999px';
+        switcher.style.border = isDarkTheme
+            ? '1px solid rgba(148, 163, 184, 0.16)'
+            : '1px solid rgba(148, 163, 184, 0.22)';
+        switcher.style.background = isDarkTheme
+            ? 'rgba(15, 23, 42, 0.7)'
+            : 'rgba(255, 255, 255, 0.8)';
+        switcher.style.backdropFilter = 'blur(14px) saturate(140%)';
+        switcher.style.boxShadow = isDarkTheme
+            ? '0 10px 28px rgba(2, 6, 23, 0.24)'
+            : '0 8px 24px rgba(15, 23, 42, 0.09)';
+        switcher.style.inlineSize = 'auto';
+        switcher.style.maxInlineSize = 'calc(100vw - 1.16rem)';
+        switcher.style.pointerEvents = 'auto';
     }
 }
 
@@ -722,6 +906,24 @@ function splitPaperId(rawId, idStyle) {
         baseId: [...parts, match ? match[1] : lastSegment].join('/'),
         version: match?.[2] ?? null
     };
+}
+
+function withAlpha(hexColor, alpha) {
+    const hex = hexColor.replace('#', '');
+
+    if (hex.length !== 6) {
+        return hexColor;
+    }
+
+    const red = Number.parseInt(hex.slice(0, 2), 16);
+    const green = Number.parseInt(hex.slice(2, 4), 16);
+    const blue = Number.parseInt(hex.slice(4, 6), 16);
+
+    return `rgba(${red}, ${green}, ${blue}, ${alpha})`;
+}
+
+function isDarkDocumentTheme(document) {
+    return document?.documentElement?.getAttribute('data-theme') === 'dark';
 }
 
 installSwitcher({

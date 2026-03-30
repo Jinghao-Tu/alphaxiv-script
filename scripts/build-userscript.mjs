@@ -13,12 +13,13 @@ const METADATA_HEADER = `// ==UserScript==
 // @name         AlphaXiv / arXiv Switcher
 // @namespace    https://github.com/jht213/alphaxiv-script
 // @version      0.1.0
-// @description  Switch between AlphaXiv, arXiv abstract, and arXiv HTML pages
+// @description  Switch between AlphaXiv and arXiv pages, with outbound links on ar5iv HTML pages
 // @match        https://www.alphaxiv.org/abs/*
 // @match        https://arxiv.org/abs/*
 // @match        https://www.arxiv.org/abs/*
 // @match        https://arxiv.org/html/*
 // @match        https://www.arxiv.org/html/*
+// @match        https://ar5iv.labs.arxiv.org/html/*
 // @grant        none
 // ==/UserScript==`;
 

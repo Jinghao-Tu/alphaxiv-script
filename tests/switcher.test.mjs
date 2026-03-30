@@ -269,6 +269,22 @@ function createArxivHtmlWithoutDownloadFixture() {
     `;
 }
 
+function createAr5ivFixture() {
+    return `
+        <div class="ltx_page_main">
+            <div class="ltx_page_content">
+                <article class="ltx_document ltx_authors_1line">
+                    <h1 id="ar5iv-title" class="ltx_title ltx_title_document">Attention Is All You Need</h1>
+                    <div id="ar5iv-authors" class="ltx_authors">Authors</div>
+                    <div class="ltx_abstract">
+                        <h6 class="ltx_title ltx_title_abstract">Abstract</h6>
+                    </div>
+                </article>
+            </div>
+        </div>
+    `;
+}
+
 function createAsyncInstallHarness() {
     const observers = [];
     const timers = new Map();
@@ -324,7 +340,7 @@ function createAsyncInstallHarness() {
 function getSwitchTargets(root) {
     return Array.from(root.querySelectorAll('[data-switch-target]')).map((element) => ({
         target: element.getAttribute('data-switch-target'),
-        text: element.textContent.trim(),
+        text: element.getAttribute('data-switch-label') ?? element.textContent.trim(),
         href: element.getAttribute('href'),
         ariaLabel: element.getAttribute('aria-label'),
         title: element.getAttribute('title')
@@ -343,6 +359,15 @@ test('parse new-style abs URL without version', () => {
 test('parse new-style html URL with version', () => {
     assert.deepEqual(parsePaperLocation('https://arxiv.org/html/1706.03762v7'), {
         pageType: 'arxiv-html',
+        baseId: '1706.03762',
+        version: 'v7',
+        idStyle: 'new'
+    });
+});
+
+test('parse ar5iv html URL with version', () => {
+    assert.deepEqual(parsePaperLocation('https://ar5iv.labs.arxiv.org/html/1706.03762v7'), {
+        pageType: 'ar5iv-html',
         baseId: '1706.03762',
         version: 'v7',
         idStyle: 'new'
@@ -404,6 +429,16 @@ test('builds only abs target from AlphaXiv old-style input', () => {
     assert.deepEqual(buildTargets(state), {
         alphaxiv: null,
         arxivAbs: 'https://arxiv.org/abs/cs/0112017',
+        arxivHtml: null
+    });
+});
+
+test('builds only abs and AlphaXiv targets from ar5iv input', () => {
+    const state = parsePaperLocation('https://ar5iv.labs.arxiv.org/html/1706.03762v7');
+
+    assert.deepEqual(buildTargets(state), {
+        alphaxiv: 'https://www.alphaxiv.org/abs/1706.03762',
+        arxivAbs: 'https://arxiv.org/abs/1706.03762v7',
         arxivHtml: null
     });
 });
@@ -492,6 +527,14 @@ test('findMountPoint finds arXiv HTML insertion point after Back to abstract pag
     assert.equal(mount.insertBefore.id, 'download-pdf');
 });
 
+test('findMountPoint mounts ar5iv switcher as a floating panel on the body', () => {
+    const dom = createDom(createAr5ivFixture(), 'https://ar5iv.labs.arxiv.org/html/1706.03762');
+    const mount = findMountPoint(dom.window.document, 'ar5iv-html');
+
+    assert.equal(mount.strategy, 'ar5iv-floating-panel');
+    assert.equal(mount.container.tagName, 'BODY');
+});
+
 test('renderSwitcher renders two links for AlphaXiv new-style pages', () => {
     const dom = createDom(
         '<main></main>',
@@ -573,6 +616,30 @@ test('renderSwitcher keeps arXiv HTML switcher clean without visual separators',
 
     assert.equal(normalizeInlineText(root.textContent), 'AlphaXiv');
     assert.equal(root.textContent.includes('|'), false);
+});
+
+test('renderSwitcher adds ar5iv outbound links to arXiv abstract and AlphaXiv', () => {
+    const dom = createDom('<main></main>', 'https://ar5iv.labs.arxiv.org/html/1706.03762');
+    const state = parsePaperLocation('https://ar5iv.labs.arxiv.org/html/1706.03762');
+    const root = renderSwitcher(dom.window.document, state, buildTargets(state));
+
+    assert.equal(root.querySelectorAll('a[data-switch-target]').length, 2);
+    assert.deepEqual(getSwitchTargets(root), [
+        {
+            target: 'arxiv-abs',
+            text: 'arXiv Abs',
+            href: 'https://arxiv.org/abs/1706.03762',
+            ariaLabel: 'Open arXiv abstract',
+            title: 'arXiv Abstract'
+        },
+        {
+            target: 'alphaxiv',
+            text: 'AlphaXiv',
+            href: 'https://www.alphaxiv.org/abs/1706.03762',
+            ariaLabel: 'Open AlphaXiv',
+            title: 'AlphaXiv'
+        }
+    ]);
 });
 
 test('installSwitcher inserts arXiv abs row after Access Paper links and before view license', () => {
@@ -704,6 +771,39 @@ test('installSwitcher inserts arXiv HTML switcher without throwing when Download
     assert.equal(backLink.nextSibling, switcher);
     assert.equal(switcher.nextSibling, toggleReading);
     assert.equal(switcher.tagName, 'A');
+});
+
+test('installSwitcher mounts ar5iv switcher as a floating button stack in the top-left corner', () => {
+    const dom = createDom(createAr5ivFixture(), 'https://ar5iv.labs.arxiv.org/html/1706.03762v7');
+    const { document } = dom.window;
+    const pageMain = document.querySelector('.ltx_page_main');
+
+    installSwitcher({ document, url: 'https://ar5iv.labs.arxiv.org/html/1706.03762v7' });
+
+    const switcher = document.querySelector('[data-alphaxiv-switcher]');
+    assert.ok(switcher);
+    assert.equal(switcher.parentElement, document.body);
+    assert.equal(switcher.nextElementSibling, pageMain);
+    assert.equal(switcher.style.position, 'fixed');
+    assert.equal(switcher.style.left, '0.58rem');
+    assert.equal(switcher.style.top, '0.58rem');
+    assert.equal(switcher.style.flexDirection, 'row');
+    assert.deepEqual(getSwitchTargets(switcher), [
+        {
+            target: 'arxiv-abs',
+            text: 'arXiv Abs',
+            href: 'https://arxiv.org/abs/1706.03762v7',
+            ariaLabel: 'Open arXiv abstract',
+            title: 'arXiv Abstract'
+        },
+        {
+            target: 'alphaxiv',
+            text: 'AlphaXiv',
+            href: 'https://www.alphaxiv.org/abs/1706.03762',
+            ariaLabel: 'Open AlphaXiv',
+            title: 'AlphaXiv'
+        }
+    ]);
 });
 
 test('installSwitcher re-injects AlphaXiv icon buttons if a transient rerender removes them', () => {
@@ -910,7 +1010,8 @@ test('build smoke test writes a distributable userscript with required metadata'
         '@match        https://arxiv.org/abs/*',
         '@match        https://www.arxiv.org/abs/*',
         '@match        https://arxiv.org/html/*',
-        '@match        https://www.arxiv.org/html/*'
+        '@match        https://www.arxiv.org/html/*',
+        '@match        https://ar5iv.labs.arxiv.org/html/*'
     ]) {
         assert.match(output, new RegExp(matchEntry.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
     }
